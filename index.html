@@ -72,13 +72,15 @@
         document.getElementById('subtitle').textContent = 'Frozen pallets · ' + months[0] + ' to ' + months[months.length - 1];
         document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
 
-        // Metric cards
+        // Metric cards — peak utilization per FC
         const metricsEl = document.getElementById('metrics');
         utilRows.forEach(r => {
           const fc = r[1];
-          const val = Math.round(parseFloat(r[r.length - 1]) * 10000) / 100;
-          const color = val >= 90 ? '#c0392b' : val >= 75 ? '#e67e22' : '#27ae60';
-          metricsEl.innerHTML += '<div class="metric"><div class="metric-label">' + fc + ' ' + months[months.length-1] + '</div><div class="metric-value" style="color:' + color + '">' + val.toFixed(1) + '%</div></div>';
+          const vals = r.slice(2).map(v => Math.round(parseFloat(v) * 10000) / 100);
+          const maxVal = Math.max(...vals);
+          const maxMonth = months[vals.indexOf(maxVal)];
+          const color = maxVal >= 90 ? '#c0392b' : maxVal >= 75 ? '#e67e22' : '#27ae60';
+          metricsEl.innerHTML += '<div class="metric"><div class="metric-label">' + fc + ' peak (' + maxMonth + ')</div><div class="metric-value" style="color:' + color + '">' + maxVal.toFixed(1) + '%</div></div>';
         });
 
         // Legend
