@@ -65,9 +65,9 @@
         const metricsEl = document.getElementById('metrics');
         utilRows.forEach(r => {
           const fc = r[1];
-          const val = Math.round(parseFloat(r[r.length - 1]) * 100);
+          const val = Math.round(parseFloat(r[r.length - 1]) * 10000) / 100;
           const color = val >= 90 ? '#c0392b' : val >= 75 ? '#e67e22' : '#27ae60';
-          metricsEl.innerHTML += '<div class="metric"><div class="metric-label">' + fc + ' ' + months[months.length-1] + '</div><div class="metric-value" style="color:' + color + '">' + val + '%</div></div>';
+          metricsEl.innerHTML += '<div class="metric"><div class="metric-label">' + fc + ' ' + months[months.length-1] + '</div><div class="metric-value" style="color:' + color + '">' + val.toFixed(1) + '%</div></div>';
         });
         const legendEl = document.getElementById('legend');
         utilRows.forEach(r => {
@@ -83,7 +83,7 @@
               ...utilRows.map(r => {
                 const fc = r[1];
                 const s = FC_STYLES[fc] || { color: '#888', dash: [] };
-                return { label: fc, data: r.slice(2).map(v => Math.round(parseFloat(v) * 1000) / 10), borderColor: s.color, backgroundColor: 'transparent', borderWidth: 2, borderDash: s.dash, pointRadius: 3, pointBackgroundColor: s.color, tension: 0.3 };
+                return { label: fc, data: r.slice(2).map(v => Math.round(parseFloat(v) * 10000) / 100), borderColor: s.color, backgroundColor: 'transparent', borderWidth: 2, borderDash: s.dash, pointRadius: 3, pointBackgroundColor: s.color, tension: 0.3 };
               }),
               { label: '100% cap', data: Array(months.length).fill(100), borderColor: '#e74c3c', borderWidth: 1.5, borderDash: [4,4], pointRadius: 0, backgroundColor: 'transparent' }
             ]
