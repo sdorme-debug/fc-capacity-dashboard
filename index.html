@@ -20,6 +20,14 @@
     .legend-item { display: flex; align-items: center; gap: 5px; }
     .status { font-size: 11px; color: #aaa; margin-top: 12px; }
     .error { color: #c0392b; font-size: 13px; padding: 12px; background: #fdf0ee; border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { text-align: left; padding: 8px 10px; color: #888; font-weight: 500; border-bottom: 0.5px solid rgba(0,0,0,0.1); }
+    td { padding: 8px 10px; border-bottom: 0.5px solid rgba(0,0,0,0.06); }
+    tr:last-child td { border-bottom: none; }
+    .fc-label { font-weight: 500; color: #444; }
+    .positive { color: #27ae60; }
+    .warning { color: #e67e22; }
+    .negative { color: #c0392b; }
   </style>
 </head>
 <body>
@@ -35,9 +43,10 @@
   </div>
   <div class="chart-card">
     <div class="chart-title">Net available pallets by FC</div>
-    <div style="position: relative; height: 260px;">
-      <canvas id="netChart" role="img" aria-label="Net pallets chart"></canvas>
-    </div>
+    <table id="netTable">
+      <thead><tr id="netHead"></tr></thead>
+      <tbody id="netBody"></tbody>
+    </table>
   </div>
   <p class="status" id="status"></p>
   <script>
@@ -62,6 +71,8 @@
         const netRows  = rows.filter(r => r[0] === 'net');
         document.getElementById('subtitle').textContent = 'Frozen pallets · ' + months[0] + ' to ' + months[months.length - 1];
         document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
+
+        // Metric cards
         const metricsEl = document.getElementById('metrics');
         utilRows.forEach(r => {
           const fc = r[1];
@@ -69,12 +80,16 @@
           const color = val >= 90 ? '#c0392b' : val >= 75 ? '#e67e22' : '#27ae60';
           metricsEl.innerHTML += '<div class="metric"><div class="metric-label">' + fc + ' ' + months[months.length-1] + '</div><div class="metric-value" style="color:' + color + '">' + val.toFixed(1) + '%</div></div>';
         });
+
+        // Legend
         const legendEl = document.getElementById('legend');
         utilRows.forEach(r => {
           const fc = r[1];
           const s = FC_STYLES[fc] || { color: '#888' };
           legendEl.innerHTML += '<div class="legend-item"><span style="display:inline-block;width:20px;height:2px;background:' + s.color + ';"></span>' + fc + '</div>';
         });
+
+        // Util chart
         new Chart(document.getElementById('utilChart'), {
           type: 'line',
           data: {
@@ -98,25 +113,19 @@
             }
           }
         });
-        new Chart(document.getElementById('netChart'), {
-          type: 'bar',
-          data: {
-            labels: months,
-            datasets: netRows.map(r => {
-              const fc = r[1];
-              const s = FC_STYLES[fc] || { color: '#888' };
-              return { label: fc, data: r.slice(2).map(v => Math.round(parseFloat(v))), backgroundColor: s.color + '99', borderColor: s.color, borderWidth: 1 };
-            })
-          },
-          options: {
-            responsive: true, maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            plugins: { legend: { labels: { font: { size: 11 }, boxWidth: 12 } } },
-            scales: {
-              y: { ticks: { font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.06)' } },
-              x: { ticks: { font: { size: 11 }, autoSkip: false }, grid: { display: false } }
-            }
-          }
+
+        // Net pallets table
+        const head = document.getElementById('netHead');
+        head.innerHTML = '<th>FC</th>' + months.map(m => '<th>' + m + '</th>').join('');
+        const body = document.getElementById('netBody');
+        netRows.forEach(r => {
+          const fc = r[1];
+          const cells = r.slice(2).map(v => {
+            const n = Math.round(parseFloat(v));
+            const cls = n < 0 ? 'negative' : n < 200 ? 'warning' : 'positive';
+            return '<td class="' + cls + '">' + n.toLocaleString() + '</td>';
+          }).join('');
+          body.innerHTML += '<tr><td class="fc-label">' + fc + '</td>' + cells + '</tr>';
         });
       })
       .catch(err => {
