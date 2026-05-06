@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FC Inbound Forecast — FCST</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f9f8; color: #1a1a1a; padding: 24px; }
+    .top-tabs { display:flex; gap:0; margin-bottom:20px; border-bottom:0.5px solid #ddd; }
+    .top-tab { font-size:12px; padding:8px 16px; cursor:pointer; color:#888; border-bottom:2px solid transparent; margin-bottom:-0.5px; transition:all 0.15s; }
+    .top-tab.active { color:#1a1a1a; border-bottom-color:#1a1a1a; font-weight:500; }
+    .status { font-size:11px; color:#aaa; margin-bottom:12px; }
+    .section-view { display:none; }
+    .section-view.active { display:block; }
+    .chart-card { background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:12px; padding:20px; margin-bottom:16px; overflow-x:auto; }
+    table { border-collapse:collapse; font-size:11px; width:100%; table-layout:fixed; }
+    th { padding:6px 10px; color:#888; font-weight:500; text-align:center; border-bottom:0.5px solid rgba(0,0,0,0.1); white-space:nowrap; font-size:11px; }
+    th.left { text-align:left; width:140px; }
+    td { padding:4px 10px; text-align:center; border-bottom:0.5px solid rgba(0,0,0,0.04); }
+    td.fc-cell { font-weight:500; font-size:11px; color:#444; text-align:left; }
+    td.day-cell { color:#888; font-size:11px; text-align:left; }
+    td.appts-cell { color:#aaa; font-size:11px; }
+    .fc-divider td { border-top:1px solid rgba(0,0,0,0.08); }
+    .cell-ok { background:#eaf3de; color:#3b6d11; border-radius:4px; padding:2px 8px; display:inline-block; min-width:28px; font-size:11px; }
+    .cell-over { background:#fcebeb; color:#a32d2d; border-radius:4px; padding:2px 8px; display:inline-block; min-width:28px; font-size:11px; font-weight:500; }
+    .cell-zero { color:#ddd; font-size:11px; }
+    .legend { display:flex; gap:16px; margin-bottom:10px; font-size:11px; color:#888; }
+    .legend-item { display:flex; align-items:center; gap:5px; }
+    .legend-dot { width:10px; height:10px; border-radius:2px; }
+    .no-overages { font-size:13px; color:#888; padding:20px; text-align:center; }
+  </style>
+</head>
+<body>
+  <div class="top-tabs">
+    <div class="top-tab active" onclick="switchTab('all')">FCST</div>
+    <div class="top-tab" onclick="switchTab('overages')">Overages only</div>
+  </div>
+  <p class="status" id="status">Loading...</p>
+
+  <div class="section-view active" id="view-all">
+    <div class="legend">
+      <div class="legend-item"><span class="legend-dot" style="background:#eaf3de;border:0.5px solid #639922;"></span>Within capacity</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#fcebeb;border:0.5px solid #a32d2d;"></span>Over capacity</div>
+    </div>
+    <div class="chart-card" id="fcst-all"></div>
+  </div>
+
+  <div class="section-view" id="view-overages">
+    <div class="chart-card" id="fcst-overages"></div>
+  </div>
+
+  <script>
+    const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQsnyvOR8MURUnK-cJIoFDfFCYQgObj0WA0wxIRkD86TUURIIUSOj_PKcaBQm3v3Mf1j952QVctK2Py/pub?gid=1276470432&single=true&output=csv';
+    const DAY_ORDER = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const FC_ORDER = ['EWR','FTW','JAX','MKE','MEM','OAK','RNO','SMF'];
+
+    function parseCSV(text) {
+      return text.trim().split('\n').map(row => {
+        const cols=[]; let cur='', inQ=false;
+        for(let i=0;i<row.length;i++){
+          const ch=row[i];
+          if(ch==='"'){inQ=!inQ;}
+          else if(ch===','&&!inQ){cols.push(cur.trim());cur='';}
+          else{cur+=ch;}
+        }
+        cols.push(cur.trim());
+        return cols;
+      });
+    }
+
+    function cellHTML(val, appts) {
+      if(val===0) return '<span class="cell-zero">—</span>';
+      const over = val > appts;
+      const cls = over ? 'cell-over' : 'cell-ok';
+      const label = over ? val+' <small>(+'+(val-appts)+')</small>' : val;
+      return '<span class="'+cls+'">'+label+'</span>';
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.top-tab').forEach((t,i) => t.classList.toggle('active',(i===0&&tab==='all')||(i===1&&tab==='overages')));
+      document.getElementById('view-all').classList.toggle('active', tab==='all');
+      document.getElementById('view-overages').classList.toggle('active', tab==='overages');
+    }
+
+    fetch(CSV_URL)
+      .then(r => r.text())
+      .then(text => {
+        const rows = parseCSV(text);
+        const headers = rows[0];
+        const fcstCols = headers.map((h,i) => h.startsWith('FCST_') ? {idx:i, date:h.replace('FCST_','')} : null).filter(Boolean);
+        const lookup = {};
+        rows.slice(1).forEach(r => { lookup[r[0]+'_'+r[1]] = {appts:parseInt(r[2])||0, vals:r}; });
+
+        document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
+
+        function buildTable(overagesOnly) {
+          let html = '<table><thead><tr><th class="left">FC</th><th class="left" style="width:80px;">Day</th><th style="width:50px;">Appts</th>';
+          fcstCols.forEach(c => { html += '<th>'+c.date+'</th>'; });
+          html += '</tr></thead><tbody>';
+          let hasAny = false;
+
+          FC_ORDER.forEach((fc, fcIdx) => {
+            DAY_ORDER.forEach((day, dayIdx) => {
+              const row = lookup[fc+'_'+day];
+              if(!row || row.appts===0) return;
+              const vals = fcstCols.map(c => parseFloat(row.vals[c.idx])||0);
+              const hasData = vals.some(v => v > 0);
+              if(!hasData) return;
+              if(overagesOnly && !vals.some(v => v > row.appts)) return;
+              hasAny = true;
+              html += '<tr'+(dayIdx===0?' class="fc-divider"':'')+'>'; 
+              html += '<td class="fc-cell">'+(dayIdx===0?fc:'')+'</td>';
+              html += '<td class="day-cell">'+day+'</td>';
+              html += '<td class="appts-cell">'+row.appts+'</td>';
+              vals.forEach(v => { html += '<td>'+cellHTML(v, row.appts)+'</td>'; });
+              html += '</tr>';
+            });
+          });
+
+          html += '</tbody></table>';
+          return hasAny ? html : '<p class="no-overages">No overages found in current FCST window.</p>';
+        }
+
+        document.getElementById('fcst-all').innerHTML = buildTable(false);
+        document.getElementById('fcst-overages').innerHTML = buildTable(true);
+      })
+      .catch(err => { document.getElementById('status').textContent = 'Could not load: '+err.message; });
+  </script>
+</body>
+</html>
