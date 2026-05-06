@@ -18,10 +18,12 @@
     .fc-dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
     table { width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed; }
     th { font-size:11px; color:#888; font-weight:400; text-align:center; padding:4px 6px 8px; border-bottom:0.5px solid rgba(0,0,0,0.08); }
-    th.left { text-align:left; width:140px; }
+    th.left { text-align:left; width:160px; }
     td { padding:5px 6px; text-align:center; }
     td.row-label { text-align:left; font-size:11px; color:#888; white-space:nowrap; }
+    td.row-label .sublabel { font-size:10px; color:#bbb; margin-left:4px; }
     .val-cell { background:#f9f9f8; border-radius:6px; padding:5px 4px; font-size:13px; font-weight:500; display:block; }
+    .divider-row td { border-top:0.5px solid rgba(0,0,0,0.06); padding-top:8px; }
   </style>
 </head>
 <body>
@@ -34,11 +36,10 @@
   <script>
     const CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS1nWgrsa3Ek5z-kZlahiqpWT6soZ_8QkpdAH_QCCgeNTATh6oNYHi5BPTMnjZFAyDQH1C9Nv68F4Y_/pub?gid=2001304532&single=true&output=csv';
 
-    const FC_ORDER = ['EWR (FC+offsite)','EWR','MEM','FTW','RNO','SMF','JAX','MKE'];
+    const FC_ORDER = ['EWR','MEM','FTW','RNO','SMF','JAX','MKE'];
     const FC_COLORS = {
-      'EWR (FC+offsite)': '#378ADD', 'EWR': '#85B7EB',
-      'MEM': '#1D9E75', 'FTW': '#7F77DD', 'RNO': '#639922',
-      'SMF': '#888780', 'JAX': '#BA7517', 'MKE': '#D85A30',
+      'EWR': '#378ADD', 'MEM': '#1D9E75', 'FTW': '#7F77DD',
+      'RNO': '#639922', 'SMF': '#888780', 'JAX': '#BA7517', 'MKE': '#D85A30',
     };
 
     function parseCSV(text) {
@@ -60,6 +61,27 @@
 
     let allData={}, weeks=[], selectedFC=null;
 
+    function renderRows(util, remaining, label, sublabel) {
+      let html = '';
+      if(util) {
+        html += '<tr><td class="row-label">Utilization %'+(sublabel?'<span class="sublabel">'+sublabel+'</span>':'')+'</td>';
+        util.forEach(v => {
+          const n = Math.round(parseFloat(v)*100);
+          html += '<td><span class="val-cell" style="color:'+utilColor(n)+';">'+n+'%</span></td>';
+        });
+        html += '</tr>';
+      }
+      if(remaining) {
+        html += '<tr><td class="row-label">Net Avail Pallets'+(sublabel?'<span class="sublabel">'+sublabel+'</span>':'')+'</td>';
+        remaining.forEach(v => {
+          const n = Math.round(parseFloat(v)||0);
+          html += '<td><span class="val-cell" style="color:'+remainingColor(n)+';">'+n.toLocaleString()+'</span></td>';
+        });
+        html += '</tr>';
+      }
+      return html;
+    }
+
     function render() {
       const content = document.getElementById('content');
       content.innerHTML = '';
@@ -67,7 +89,8 @@
 
       fcsToShow.forEach(fc => {
         const d = allData[fc];
-        if(!d) return;
+        const dOffsite = allData[fc+' (FC+offsite)'];
+        if(!d && !dOffsite) return;
 
         const card = document.createElement('div');
         card.className = 'fc-card';
@@ -78,24 +101,24 @@
         weeks.forEach(w => { html += '<th>'+w.replace('/2026','')+'</th>'; });
         html += '</tr></thead><tbody>';
 
-        // Row 1: Utilization %
-        if(d.util) {
-          html += '<tr><td class="row-label">Utilization %</td>';
-          d.util.forEach(v => {
+        if(dOffsite) {
+          // EWR — show w/ offsite rows first, then FC-only rows with divider
+          html += renderRows(dOffsite.util, dOffsite.remaining, fc, 'w/ offsite');
+          html += '<tr class="divider-row">';
+          html += '<td class="row-label">Utilization % <span class="sublabel">FC only</span></td>';
+          (d.util||[]).forEach(v => {
             const n = Math.round(parseFloat(v)*100);
             html += '<td><span class="val-cell" style="color:'+utilColor(n)+';">'+n+'%</span></td>';
           });
           html += '</tr>';
-        }
-
-        // Row 2: Net Avail Pallets (remaining)
-        if(d.remaining) {
-          html += '<tr><td class="row-label">Net Avail Pallets</td>';
-          d.remaining.forEach(v => {
+          html += '<tr><td class="row-label">Net Avail Pallets <span class="sublabel">FC only</span></td>';
+          (d.remaining||[]).forEach(v => {
             const n = Math.round(parseFloat(v)||0);
             html += '<td><span class="val-cell" style="color:'+remainingColor(n)+';">'+n.toLocaleString()+'</span></td>';
           });
           html += '</tr>';
+        } else {
+          html += renderRows(d.util, d.remaining, fc, null);
         }
 
         html += '</tbody></table>';
@@ -127,7 +150,7 @@
         allPill.onclick=()=>{selectedFC=null;document.querySelectorAll('.fc-pill').forEach(p=>p.classList.remove('active'));allPill.classList.add('active');render();};
         pillsEl.appendChild(allPill);
 
-        FC_ORDER.filter(fc=>allData[fc]).forEach(fc=>{
+        FC_ORDER.filter(fc=>allData[fc]||allData[fc+' (FC+offsite)']).forEach(fc=>{
           const pill=document.createElement('div');
           pill.className='fc-pill';
           pill.textContent=fc;
