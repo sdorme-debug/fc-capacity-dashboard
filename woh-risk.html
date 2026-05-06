@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WOH Risk Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f9f8; color: #1a1a1a; padding: 24px; }
+    .top-tabs { display:flex; gap:0; margin-bottom:16px; border-bottom:0.5px solid #ddd; }
+    .top-tab { font-size:12px; padding:8px 16px; cursor:pointer; color:#888; border-bottom:2px solid transparent; margin-bottom:-0.5px; transition:all 0.15s; }
+    .top-tab.active { color:#1a1a1a; border-bottom-color:#1a1a1a; font-weight:500; }
+    .fc-pills { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+    .fc-pill { font-size:11px; padding:4px 12px; border-radius:20px; border:0.5px solid #ccc; cursor:pointer; background:#f1f0e8; color:#5f5e5a; transition:all 0.15s; }
+    .fc-pill.active { background:#1a1a1a; color:#fff; border-color:#1a1a1a; }
+    .summary-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:16px; }
+    .summary-card { background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:8px; padding:10px 14px; }
+    .summary-label { font-size:11px; color:#888; margin-bottom:4px; }
+    .summary-value { font-size:22px; font-weight:500; }
+    .section-view { display:none; }
+    .section-view.active { display:block; }
+    .chart-card { background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:12px; padding:20px; margin-bottom:16px; overflow-x:auto; }
+    table { border-collapse:collapse; font-size:11px; width:100%; }
+    th { padding:6px 10px; color:#888; font-weight:500; text-align:left; border-bottom:0.5px solid rgba(0,0,0,0.1); white-space:nowrap; }
+    td { padding:6px 10px; border-bottom:0.5px solid rgba(0,0,0,0.04); font-size:12px; }
+    tr:last-child td { border-bottom:none; }
+    .fc-divider td { border-top:1px solid rgba(0,0,0,0.08); }
+    .risk-oos { background:#FCEBEB; color:#791F1F; border-radius:4px; padding:2px 8px; font-size:11px; font-weight:500; display:inline-block; }
+    .risk-critical { background:#F7C1C1; color:#A32D2D; border-radius:4px; padding:2px 8px; font-size:11px; font-weight:500; display:inline-block; }
+    .risk-atrisk { background:#FAEEDA; color:#633806; border-radius:4px; padding:2px 8px; font-size:11px; font-weight:500; display:inline-block; }
+    .woh-val { font-weight:500; }
+    .trend-up { color:#27ae60; font-size:11px; }
+    .trend-down { color:#c0392b; font-size:11px; }
+    .trend-flat { color:#888; font-size:11px; }
+    .status { font-size:11px; color:#aaa; margin-bottom:12px; }
+    .no-risks { font-size:13px; color:#888; padding:20px; text-align:center; }
+  </style>
+</head>
+<body>
+  <p class="status" id="status">Loading...</p>
+  <div class="summary-grid" id="summary"></div>
+  <div class="top-tabs" id="week-tabs"></div>
+  <div class="fc-pills" id="fc-pills"></div>
+  <div id="content"></div>
+
+  <script>
+    const CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS5UGXu44UBGjQp-RWXHUmU1r1EEnbVEHtwi952lTKGfWEWUdCLwgEvytyXCfWtrTtJgn0DGb5qUavg/pub?gid=118627490&single=true&output=csv';
+    const FC_ORDER = ['EWR','MEM','FTW','RNO','SMF','JAX','MKE','WC','Network'];
+
+    function parseCSV(text) {
+      return text.trim().split('\n').map(r => {
+        const cols=[]; let cur='', inQ=false;
+        for(let i=0;i<r.length;i++){
+          const ch=r[i];
+          if(ch==='"'){inQ=!inQ;}
+          else if(ch===','&&!inQ){cols.push(cur.trim());cur='';}
+          else{cur+=ch;}
+        }
+        cols.push(cur.trim());
+        return cols;
+      });
+    }
+
+    function riskBadge(risk) {
+      if(risk==='Out of stock') return '<span class="risk-oos">Out of stock</span>';
+      if(risk==='Critical') return '<span class="risk-critical">Critical</span>';
+      return '<span class="risk-atrisk">At risk</span>';
+    }
+
+    function trendArrow(start, end) {
+      if(end === '—' || end === null) return '<span class="trend-flat">—</span>';
+      const s = parseFloat(start), e = parseFloat(end);
+      if(isNaN(s)||isNaN(e)) return '<span class="trend-flat">—</span>';
+      if(e > s + 0.2) return '<span class="trend-up">↑ ' + e.toFixed(1) + '</span>';
+      if(e < s - 0.2) return '<span class="trend-down">↓ ' + e.toFixed(1) + '</span>';
+      return '<span class="trend-flat">→ ' + e.toFixed(1) + '</span>';
+    }
+
+    let allData = {}, allWeeks = [], selectedWeek = null, selectedFC = null;
+
+    function render() {
+      const week = selectedWeek || allWeeks[0];
+      const rows = (allData[week] || []).filter(r => !selectedFC || r.fc === selectedFC);
+
+      const content = document.getElementById('content');
+      if(rows.length === 0) {
+        content.innerHTML = '<div class="chart-card"><p class="no-risks">No risks found for this week' + (selectedFC ? ' at ' + selectedFC : '') + '.</p></div>';
+        return;
+      }
+
+      // Group by FC
+      const byFC = {};
+      rows.forEach(r => {
+        if(!byFC[r.fc]) byFC[r.fc] = [];
+        byFC[r.fc].push(r);
+      });
+
+      let html = '<div class="chart-card"><table><thead><tr><th style="width:100px;">FC</th><th>SKU</th><th style="width:100px;">Starting WOH</th><th style="width:120px;">Ending WOH</th><th style="width:100px;">Risk</th></tr></thead><tbody>';
+
+      FC_ORDER.forEach(fc => {
+        if(!byFC[fc]) return;
+        byFC[fc].sort((a,b) => a.startWOH - b.startWOH).forEach((r, i) => {
+          html += '<tr' + (i===0?' class="fc-divider"':'') + '>';
+          html += '<td style="font-weight:500;">' + (i===0?fc:'') + '</td>';
+          html += '<td>' + r.sku + '</td>';
+          html += '<td><span class="woh-val">' + r.startWOH.toFixed(1) + '</span></td>';
+          html += '<td>' + trendArrow(r.startWOH, r.endWOH) + '</td>';
+          html += '<td>' + riskBadge(r.risk) + '</td>';
+          html += '</tr>';
+        });
+      });
+
+      html += '</tbody></table></div>';
+      content.innerHTML = html;
+    }
+
+    function updateSummary() {
+      const week = selectedWeek || allWeeks[0];
+      const rows = allData[week] || [];
+      const oos = rows.filter(r => r.risk === 'Out of stock').length;
+      const critical = rows.filter(r => r.risk === 'Critical').length;
+      const atRisk = rows.filter(r => r.risk === 'At risk').length;
+      document.getElementById('summary').innerHTML =
+        '<div class="summary-card"><div class="summary-label">Out of stock</div><div class="summary-value" style="color:#791F1F;">' + oos + '</div></div>' +
+        '<div class="summary-card"><div class="summary-label">Critical (&lt;1 WOH)</div><div class="summary-value" style="color:#A32D2D;">' + critical + '</div></div>' +
+        '<div class="summary-card"><div class="summary-label">At risk (&lt;2 WOH)</div><div class="summary-value" style="color:#633806;">' + atRisk + '</div></div>';
+    }
+
+    fetch(CSV)
+      .then(r => r.text())
+      .then(text => {
+        const rows = parseCSV(text).slice(1);
+        rows.forEach(r => {
+          const [week, sku, fc, startWOH, endWOH, risk] = r;
+          if(!week||!sku||!fc) return;
+          if(!allData[week]) { allData[week] = []; allWeeks.push(week); }
+          allData[week].push({
+            week, sku, fc,
+            startWOH: parseFloat(startWOH)||0,
+            endWOH: endWOH === '—' ? '—' : parseFloat(endWOH),
+            risk
+          });
+        });
+
+        allWeeks = [...new Set(allWeeks)];
+        selectedWeek = allWeeks[0];
+
+        document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
+
+        // Week tabs
+        const tabsEl = document.getElementById('week-tabs');
+        allWeeks.forEach((w, i) => {
+          const tab = document.createElement('div');
+          tab.className = 'top-tab' + (i===0?' active':'');
+          tab.textContent = 'Wk of ' + w;
+          tab.onclick = () => {
+            selectedWeek = w;
+            document.querySelectorAll('.top-tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            updateSummary();
+            render();
+          };
+          tabsEl.appendChild(tab);
+        });
+
+        // FC pills
+        const pillsEl = document.getElementById('fc-pills');
+        const allPill = document.createElement('div');
+        allPill.className = 'fc-pill active';
+        allPill.textContent = 'All FCs';
+        allPill.onclick = () => {
+          selectedFC = null;
+          document.querySelectorAll('.fc-pill').forEach(p => p.classList.remove('active'));
+          allPill.classList.add('active');
+          render();
+        };
+        pillsEl.appendChild(allPill);
+
+        const fcsInData = new Set(rows.map(r => r[2]));
+        FC_ORDER.filter(fc => fcsInData.has(fc)).forEach(fc => {
+          const pill = document.createElement('div');
+          pill.className = 'fc-pill';
+          pill.textContent = fc;
+          pill.onclick = () => {
+            selectedFC = fc;
+            document.querySelectorAll('.fc-pill').forEach(p => p.classList.remove('active'));
+            pill.classList.add('active');
+            render();
+          };
+          pillsEl.appendChild(pill);
+        });
+
+        updateSummary();
+        render();
+      })
+      .catch(err => { document.getElementById('status').textContent = 'Could not load: ' + err.message; });
+  </script>
+</body>
+</html>
