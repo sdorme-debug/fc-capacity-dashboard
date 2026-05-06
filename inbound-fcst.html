@@ -100,8 +100,9 @@
           html += '</tr></thead><tbody>';
           let hasAny = false;
 
-          FC_ORDER.forEach((fc, fcIdx) => {
-            DAY_ORDER.forEach((day, dayIdx) => {
+          FC_ORDER.forEach(fc => {
+            let firstRowForFC = true;
+            DAY_ORDER.forEach(day => {
               const row = lookup[fc+'_'+day];
               if(!row || row.appts===0) return;
               const vals = fcstCols.map(c => parseFloat(row.vals[c.idx])||0);
@@ -109,12 +110,13 @@
               if(!hasData) return;
               if(overagesOnly && !vals.some(v => v > row.appts)) return;
               hasAny = true;
-              html += '<tr'+(dayIdx===0?' class="fc-divider"':'')+'>'; 
-              html += '<td class="fc-cell">'+(dayIdx===0?fc:'')+'</td>';
+              html += '<tr'+(firstRowForFC?' class="fc-divider"':'')+'>'; 
+              html += '<td class="fc-cell">'+(firstRowForFC?fc:'')+'</td>';
               html += '<td class="day-cell">'+day+'</td>';
               html += '<td class="appts-cell">'+row.appts+'</td>';
               vals.forEach(v => { html += '<td>'+cellHTML(v, row.appts)+'</td>'; });
               html += '</tr>';
+              firstRowForFC = false;
             });
           });
 
