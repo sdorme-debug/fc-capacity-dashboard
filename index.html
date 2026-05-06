@@ -29,18 +29,18 @@
   </style>
 </head>
 <body>
-  <h1>Projected capacity need</h1>
+  <h1>Projected capacity need — Optimal WOH</h1>
   <p class="subtitle" id="subtitle">Loading...</p>
   <div class="metric-grid" id="metrics"></div>
   <div class="chart-card">
-    <div class="chart-title">Utilization % by FC — at target WOH</div>
+    <div class="chart-title">Utilization % by FC</div>
     <div class="legend" id="legend"></div>
     <div style="position: relative; height: 320px;">
-      <canvas id="utilChart" role="img" aria-label="Projected utilization % by FC at target WOH"></canvas>
+      <canvas id="utilChart" role="img" aria-label="Projected utilization % by FC at optimal WOH"></canvas>
     </div>
   </div>
   <div class="chart-card">
-    <div class="chart-title">Net available pallets by FC — at target WOH</div>
+    <div class="chart-title">Net available pallets by FC</div>
     <table id="netTable"><thead><tr id="netHead"></tr></thead><tbody id="netBody"></tbody></table>
   </div>
   <p class="status" id="status"></p>
@@ -57,21 +57,37 @@
       OAK: { color: '#D4537E', dash: [2,2] },
     };
 
+    const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
     function parseCSV(t) { return t.trim().split('\n').map(r => r.split(',').map(c => c.trim().replace(/^"|"$/g,''))); }
 
-    const today = new Date();
-    const sixWeeksOut = new Date(today.getTime() + 42 * 24 * 60 * 60 * 1000);
-
-    function monthStartDate(label) {
-      const monthMap = { Jan:0, Feb:1, Mar:2, Apr:3, May:4, Jun:5, Jul:6, Aug:7, Sep:8, Oct:9, Nov:10, Dec:11 };
-      const parts = label.trim().split(' ');
-      if (parts.length === 2) {
-        return new Date(parseInt(parts[1]), monthMap[parts[0]], 1);
+    function parseMonthLabel(label) {
+      // Try "M/D/YYYY" format (e.g. "4/1/2026")
+      const slashMatch = label.match(/^(\d{1,2})\/\d{1,2}\/(\d{4})$/);
+      if (slashMatch) return new Date(parseInt(slashMatch[2]), parseInt(slashMatch[1]) - 1, 1);
+      // Try "Mon" format (e.g. "Apr") — assume current or next year
+      const monthIdx = MONTH_NAMES.indexOf(label.trim());
+      if (monthIdx !== -1) {
+        const today = new Date();
+        const year = monthIdx < today.getMonth() ? today.getFullYear() + 1 : today.getFullYear();
+        return new Date(year, monthIdx, 1);
       }
-      // Try parsing as date string directly
-      const d = new Date(label);
-      return isNaN(d) ? null : new Date(d.getFullYear(), d.getMonth(), 1);
+      // Try "Mon YYYY" format
+      const spaceMatch = label.match(/^([A-Za-z]{3})\s+(\d{4})$/);
+      if (spaceMatch) {
+        const idx = MONTH_NAMES.indexOf(spaceMatch[1]);
+        if (idx !== -1) return new Date(parseInt(spaceMatch[2]), idx, 1);
+      }
+      return null;
     }
+
+    function formatMonthLabel(d) {
+      return MONTH_NAMES[d.getMonth()] + ' ' + d.getFullYear();
+    }
+
+    // Start = first day of 2 months from now
+    const today = new Date();
+    const cutoff = new Date(today.getFullYear(), today.getMonth() + 2, 1);
 
     fetch(LT_URL)
       .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
@@ -81,23 +97,26 @@
         const utilRows = rows.filter(r => r[0]==='util');
         const netRows  = rows.filter(r => r[0]==='net');
 
-        // Filter to only months 6+ weeks out
+        // Filter to months >= cutoff
         const validIndices = allMonths.map((m, i) => {
-          const d = monthStartDate(m);
-          return d && d >= sixWeeksOut ? i : null;
+          const d = parseMonthLabel(m);
+          return d && d >= cutoff ? i : null;
         }).filter(i => i !== null);
 
-        const months = validIndices.map(i => allMonths[i]);
+        const months = validIndices.map(i => {
+          const d = parseMonthLabel(allMonths[i]);
+          return d ? formatMonthLabel(d) : allMonths[i];
+        });
 
         if (months.length === 0) {
-          document.getElementById('subtitle').textContent = 'No months available 6+ weeks out';
+          document.getElementById('subtitle').textContent = 'No data available beyond 2 months out — check Dashboard Export tab';
           return;
         }
 
-        document.getElementById('subtitle').textContent = 'At target WOH · ' + months[0] + ' – ' + months[months.length-1];
+        document.getElementById('subtitle').textContent = months[0] + ' – ' + months[months.length-1];
         document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
 
-        // Metric cards — peak util per FC across filtered months
+        // Metric cards — peak util per FC
         const metricsEl = document.getElementById('metrics');
         utilRows.forEach(r => {
           const fc = r[1];
@@ -124,16 +143,9 @@
             labels: months,
             datasets: [
               ...utilRows.map(r => {
-                const fc = r[1];
-                const s = FC_STYLES[fc]||{color:'#888',dash:[]};
+                const fc = r[1]; const s = FC_STYLES[fc]||{color:'#888',dash:[]};
                 const allVals = r.slice(2);
-                return {
-                  label: fc,
-                  data: validIndices.map(i => Math.round(parseFloat(allVals[i]) * 10000) / 100),
-                  borderColor: s.color, backgroundColor: 'transparent',
-                  borderWidth: 2, borderDash: s.dash,
-                  pointRadius: 3, pointBackgroundColor: s.color, tension: 0.3
-                };
+                return { label: fc, data: validIndices.map(i => Math.round(parseFloat(allVals[i]) * 10000) / 100), borderColor: s.color, backgroundColor: 'transparent', borderWidth: 2, borderDash: s.dash, pointRadius: 3, pointBackgroundColor: s.color, tension: 0.3 };
               }),
               { label: '100% cap', data: Array(months.length).fill(100), borderColor: '#e74c3c', borderWidth: 1.5, borderDash: [4,4], pointRadius: 0, backgroundColor: 'transparent' }
             ]
@@ -156,17 +168,11 @@
         netRows.forEach(r => {
           const fc = r[1];
           const allVals = r.slice(2);
-          const cells = validIndices.map(i => {
-            const n = Math.round(parseFloat(allVals[i]));
-            const cls = n < 0 ? 'neg' : n < 200 ? 'warn' : 'pos';
-            return '<td class="'+cls+'">'+n.toLocaleString()+'</td>';
-          }).join('');
+          const cells = validIndices.map(i => { const n = Math.round(parseFloat(allVals[i])); const cls = n < 0 ? 'neg' : n < 200 ? 'warn' : 'pos'; return '<td class="'+cls+'">'+n.toLocaleString()+'</td>'; }).join('');
           body.innerHTML += '<tr><td class="fc-label">'+fc+'</td>'+cells+'</tr>';
         });
       })
-      .catch(err => {
-        document.getElementById('metrics').innerHTML = '<div class="error">Could not load data: '+err.message+'</div>';
-      });
+      .catch(err => { document.getElementById('metrics').innerHTML = '<div class="error">Could not load data: '+err.message+'</div>'; });
   </script>
 </body>
 </html>
