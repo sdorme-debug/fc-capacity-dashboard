@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Network WOH</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f9f8; color: #1a1a1a; padding: 24px; }
+    h1 { font-size: 16px; font-weight: 500; color: #444; margin-bottom: 4px; }
+    .subtitle { font-size: 12px; color: #888; margin-bottom:16px; }
+    .dataset-tabs { display:flex; gap:8px; margin-bottom:16px; }
+    .dataset-tab { font-size:12px; padding:5px 14px; border-radius:20px; border:0.5px solid #ccc; cursor:pointer; background:#f1f0e8; color:#5f5e5a; transition:all 0.15s; }
+    .dataset-tab.active { background:#1a1a1a; color:#fff; border-color:#1a1a1a; font-weight:500; }
+    .dataset-view { display:none; }
+    .dataset-view.active { display:block; }
+    .status { font-size:11px; color:#aaa; margin-bottom:12px; }
+    .recipe-section { margin-bottom:16px; background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:12px; overflow:hidden; }
+    .recipe-header { font-size:12px; font-weight:500; color:#555; padding:10px 16px; background:#f9f9f8; border-bottom:0.5px solid rgba(0,0,0,0.08); }
+    .sku-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(160px, 1fr)); gap:0; }
+    .sku-cell { padding:10px 16px; border-bottom:0.5px solid rgba(0,0,0,0.04); border-right:0.5px solid rgba(0,0,0,0.04); }
+    .sku-name { font-size:11px; color:#888; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .sku-woh { font-size:16px; font-weight:500; }
+    .woh-oos { color:#791F1F; }
+    .woh-critical { color:#A32D2D; }
+    .woh-atrisk { color:#BA7517; }
+    .woh-ok { color:#27ae60; }
+    .woh-good { color:#1D9E75; }
+    .woh-dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:4px; vertical-align:middle; }
+  </style>
+</head>
+<body>
+  <h1>Network WOH by SKU</h1>
+  <p class="subtitle" id="subtitle">Loading...</p>
+  <div class="dataset-tabs">
+    <div class="dataset-tab active" onclick="switchDataset('frozen')">Frozen</div>
+    <div class="dataset-tab" onclick="switchDataset('packaging')">Packaging</div>
+  </div>
+  <p class="status" id="status"></p>
+  <div class="dataset-view active" id="ds-frozen"></div>
+  <div class="dataset-view" id="ds-packaging"></div>
+
+  <script>
+    const CSVS = {
+      frozen: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS5UGXu44UBGjQp-RWXHUmU1r1EEnbVEHtwi952lTKGfWEWUdCLwgEvytyXCfWtrTtJgn0DGb5qUavg/pub?gid=1837194366&single=true&output=csv',
+      packaging: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS5UGXu44UBGjQp-RWXHUmU1r1EEnbVEHtwi952lTKGfWEWUdCLwgEvytyXCfWtrTtJgn0DGb5qUavg/pub?gid=552345443&single=true&output=csv',
+    };
+
+    function parseCSV(text) {
+      return text.trim().split('\n').map(r => {
+        const cols=[]; let cur='', inQ=false;
+        for(let i=0;i<r.length;i++){
+          const ch=r[i];
+          if(ch==='"'){inQ=!inQ;}
+          else if(ch===','&&!inQ){cols.push(cur.trim());cur='';}
+          else{cur+=ch;}
+        }
+        cols.push(cur.trim());
+        return cols;
+      });
+    }
+
+    function wohColor(v) {
+      if(v<=0) return 'woh-oos';
+      if(v<1) return 'woh-critical';
+      if(v<2) return 'woh-atrisk';
+      if(v<4) return 'woh-ok';
+      return 'woh-good';
+    }
+
+    function dotColor(v) {
+      if(v<=0) return '#791F1F';
+      if(v<1) return '#A32D2D';
+      if(v<2) return '#BA7517';
+      if(v<4) return '#27ae60';
+      return '#1D9E75';
+    }
+
+    function switchDataset(ds) {
+      document.querySelectorAll('.dataset-tab').forEach((t,i) => {
+        t.classList.toggle('active', ['frozen','packaging'][i]===ds);
+      });
+      document.querySelectorAll('.dataset-view').forEach(v => v.classList.remove('active'));
+      document.getElementById('ds-'+ds).classList.add('active');
+    }
+
+    function renderDataset(ds, rows) {
+      const container = document.getElementById('ds-'+ds);
+
+      // Group by category
+      const groups = {};
+      const groupOrder = [];
+      rows.forEach(r => {
+        const cat = r[0]||'Other';
+        const sku = r[1];
+        const woh = parseFloat(r[2]);
+        if(!sku || isNaN(woh)) return;
+        if(!groups[cat]) { groups[cat]=[]; groupOrder.push(cat); }
+        groups[cat].push({ sku, woh });
+      });
+
+      let html = '';
+      groupOrder.forEach(cat => {
+        const skus = groups[cat].sort((a,b) => a.woh - b.woh);
+        html += '<div class="recipe-section">';
+        html += '<div class="recipe-header">'+cat+'</div>';
+        html += '<div class="sku-grid">';
+        skus.forEach(s => {
+          const cls = wohColor(s.woh);
+          const dot = dotColor(s.woh);
+          html += '<div class="sku-cell">';
+          html += '<div class="sku-name" title="'+s.sku+'">'+s.sku+'</div>';
+          html += '<div class="sku-woh '+cls+'"><span class="woh-dot" style="background:'+dot+';"></span>'+s.woh.toFixed(1)+'</div>';
+          html += '</div>';
+        });
+        html += '</div></div>';
+      });
+
+      container.innerHTML = html;
+    }
+
+    Promise.all([
+      fetch(CSVS.frozen).then(r=>r.text()),
+      fetch(CSVS.packaging).then(r=>r.text()),
+    ]).then(([frozenText, packagingText]) => {
+      const frozenRows = parseCSV(frozenText).slice(1);
+      const packagingRows = parseCSV(packagingText).slice(1);
+
+      const week = frozenRows[0] ? frozenRows[0][3] : '';
+      document.getElementById('subtitle').textContent = 'Week of ' + week;
+      document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
+
+      renderDataset('frozen', frozenRows);
+      renderDataset('packaging', packagingRows);
+    }).catch(err => {
+      document.getElementById('status').textContent = 'Could not load: ' + err.message;
+    });
+  </script>
+</body>
+</html>
