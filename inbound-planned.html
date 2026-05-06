@@ -29,6 +29,7 @@
     .legend-item { display:flex; align-items:center; gap:5px; }
     .legend-dot { width:10px; height:10px; border-radius:2px; }
     .no-overages { font-size:13px; color:#888; padding:20px; text-align:center; }
+    .month-note { font-size:10px; color:#aaa; margin-bottom:8px; }
   </style>
 </head>
 <body>
@@ -37,11 +38,12 @@
     <div class="top-tab" onclick="switchTab('overages')">Overages only</div>
   </div>
   <p class="status" id="status">Loading...</p>
+  <p class="month-note" id="month-note"></p>
 
   <div class="section-view active" id="view-all">
     <div class="legend">
       <div class="legend-item"><span class="legend-dot" style="background:#eaf3de;border:0.5px solid #639922;"></span>Within capacity</div>
-      <div class="legend-item"><span class="legend-dot" style="background:#fcebeb;border:0.5px solid #a32d2d;"></span>Over capacity</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#fcebeb;border:0.5px solid #a32d2d;"></span>Over capacity (peak week)</div>
     </div>
     <div class="chart-card" id="planned-all"></div>
   </div>
@@ -54,6 +56,7 @@
     const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQsnyvOR8MURUnK-cJIoFDfFCYQgObj0WA0wxIRkD86TUURIIUSOj_PKcaBQm3v3Mf1j952QVctK2Py/pub?gid=1276470432&single=true&output=csv';
     const DAY_ORDER = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
     const FC_ORDER = ['EWR','FTW','JAX','MKE','MEM','OAK','RNO','SMF'];
+    const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
     function parseCSV(text) {
       return text.trim().split('\n').map(row => {
@@ -69,8 +72,17 @@
       });
     }
 
+    function parseDate(str) {
+      const parts = str.split('/');
+      if(parts.length === 3) return new Date(parseInt(parts[2]), parseInt(parts[0])-1, parseInt(parts[1]));
+      return null;
+    }
+
+    function monthKey(d) { return d.getFullYear() + '-' + d.getMonth(); }
+    function monthLabel(d) { return MONTH_NAMES[d.getMonth()] + ' ' + d.getFullYear(); }
+
     function cellHTML(val, appts) {
-      if(val===0) return '<span class="cell-zero">—</span>';
+      if(val === 0) return '<span class="cell-zero">—</span>';
       const over = val > appts;
       const cls = over ? 'cell-over' : 'cell-ok';
       const label = over ? val+' <small>(+'+(val-appts)+')</small>' : val;
@@ -88,33 +100,65 @@
       .then(text => {
         const rows = parseCSV(text);
         const headers = rows[0];
-        const plannedCols = headers.map((h,i) => h.startsWith('Planned_') ? {idx:i, date:h.replace('Planned_','')} : null).filter(Boolean).slice(0,16);
+
+        // Get all Planned columns with parsed dates
+        const plannedCols = headers.map((h,i) => {
+          if(!h.startsWith('Planned_')) return null;
+          const d = parseDate(h.replace('Planned_',''));
+          return d ? {idx:i, date:d} : null;
+        }).filter(Boolean);
+
+        // Group planned columns by month
+        const monthMap = {};
+        plannedCols.forEach(c => {
+          const key = monthKey(c.date);
+          if(!monthMap[key]) monthMap[key] = { label: monthLabel(c.date), cols: [] };
+          monthMap[key].cols.push(c);
+        });
+
+        // Sort months chronologically
+        const months = Object.keys(monthMap).sort().map(k => monthMap[k]);
+
+        // Build lookup: FC_day -> { appts, vals }
         const lookup = {};
-        rows.slice(1).forEach(r => { lookup[r[0]+'_'+r[1]] = {appts:parseInt(r[2])||0, vals:r}; });
+        rows.slice(1).forEach(r => {
+          const key = r[0]+'_'+r[1];
+          if(!lookup[key]) lookup[key] = { appts: parseInt(r[2])||0, vals: r };
+        });
 
         document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
+        document.getElementById('month-note').textContent = 'Values show peak week within each month vs weekly appointment capacity';
 
         function buildTable(overagesOnly) {
           let html = '<table><thead><tr><th class="left">FC</th><th class="left" style="width:80px;">Day</th><th style="width:50px;">Appts</th>';
-          plannedCols.forEach(c => { html += '<th>'+c.date+'</th>'; });
+          months.forEach(m => { html += '<th>'+m.label+'</th>'; });
           html += '</tr></thead><tbody>';
           let hasAny = false;
 
-          FC_ORDER.forEach((fc, fcIdx) => {
-            DAY_ORDER.forEach((day, dayIdx) => {
+          FC_ORDER.forEach(fc => {
+            let firstRowForFC = true;
+            DAY_ORDER.forEach(day => {
               const row = lookup[fc+'_'+day];
-              if(!row || row.appts===0) return;
-              const vals = plannedCols.map(c => parseFloat(row.vals[c.idx].toString().replace(/[,%]/g,''))||0);
-              const hasData = vals.some(v => v > 0);
+              if(!row || row.appts === 0) return;
+
+              // Get peak week value per month
+              const peakVals = months.map(m => {
+                const weekVals = m.cols.map(c => parseFloat(row.vals[c.idx].toString().replace(/[,%]/g,''))||0);
+                return Math.max(...weekVals, 0);
+              });
+
+              const hasData = peakVals.some(v => v > 0);
               if(!hasData) return;
-              if(overagesOnly && !vals.some(v => v > row.appts)) return;
+              if(overagesOnly && !peakVals.some(v => v > row.appts)) return;
+
               hasAny = true;
-              html += '<tr'+(dayIdx===0?' class="fc-divider"':'')+'>'; 
-              html += '<td class="fc-cell">'+(dayIdx===0?fc:'')+'</td>';
+              html += '<tr'+(firstRowForFC?' class="fc-divider"':'')+'>'; 
+              html += '<td class="fc-cell">'+(firstRowForFC?fc:'')+'</td>';
               html += '<td class="day-cell">'+day+'</td>';
               html += '<td class="appts-cell">'+row.appts+'</td>';
-              vals.forEach(v => { html += '<td>'+cellHTML(v, row.appts)+'</td>'; });
+              peakVals.forEach(v => { html += '<td>'+cellHTML(v, row.appts)+'</td>'; });
               html += '</tr>';
+              firstRowForFC = false;
             });
           });
 
