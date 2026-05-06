@@ -79,9 +79,9 @@
           if (!uRow) return;
 
           const limit = LIMIT_3_WEEKS.includes(fc) ? 3 : weeks.length;
-          const uVals = uRow.slice(2).map(v => parseFloat(v));
-          const nVals = nRow ? nRow.slice(2).map(v => Math.round(parseFloat(v.replace(/,/g,'')))) : [];
-          const wVals = wRow ? wRow.slice(2).map(v => parseFloat(v).toFixed(1)) : [];
+          const uVals = uRow.slice(2).map(v => parseFloat(v.replace('%','')));
+          const nVals = nRow ? nRow.slice(2).map(v => Math.round(parseFloat(v.replace(/[,%]/g,'')))) : [];
+          const wVals = wRow ? wRow.slice(2).map(v => parseFloat(v.replace('%','')).toFixed(1)) : [];
 
           const card = document.createElement('div');
           card.className = 'fc-card';
