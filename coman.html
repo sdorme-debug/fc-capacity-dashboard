@@ -7,6 +7,9 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f9f8; color: #1a1a1a; padding: 24px; }
+    .top-tabs { display:flex; gap:0; margin-bottom:20px; border-bottom:0.5px solid #ddd; }
+    .top-tab { font-size:12px; padding:8px 16px; cursor:pointer; color:#888; border-bottom:2px solid transparent; margin-bottom:-0.5px; transition:all 0.15s; }
+    .top-tab.active { color:#1a1a1a; border-bottom-color:#1a1a1a; font-weight:500; }
     .fc-pills { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; }
     .fc-pill { font-size:11px; padding:4px 12px; border-radius:20px; border:0.5px solid #ccc; cursor:pointer; background:#f1f0e8; color:#5f5e5a; transition:all 0.15s; }
     .fc-pill.active { background:#1a1a1a; color:#fff; border-color:#1a1a1a; }
@@ -28,12 +31,34 @@
     .legend { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
     .legend-item { display:flex; align-items:center; gap:4px; font-size:11px; color:#666; }
     .legend-dot { width:10px; height:10px; border-radius:2px; }
+    .changes-table { width:100%; border-collapse:collapse; font-size:12px; }
+    .changes-table th { text-align:left; padding:8px 12px; color:#888; font-weight:500; border-bottom:0.5px solid rgba(0,0,0,0.1); }
+    .changes-table td { padding:8px 12px; border-bottom:0.5px solid rgba(0,0,0,0.05); }
+    .changes-table tr:last-child td { border-bottom:none; }
+    .coman-badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+    .change-arrow { color:#888; margin:0 6px; }
+    .no-changes { font-size:13px; color:#888; padding:20px; text-align:center; }
+    .section-view { display:none; }
+    .section-view.active { display:block; }
   </style>
 </head>
 <body>
-  <div class="fc-pills" id="fc-pills"></div>
+  <div class="top-tabs">
+    <div class="top-tab active" onclick="switchTab('timeline')">Timeline</div>
+    <div class="top-tab" onclick="switchTab('changes')">Upcoming changes</div>
+  </div>
+
   <p class="status" id="status">Loading...</p>
-  <div id="content"></div>
+
+  <div class="section-view active" id="view-timeline">
+    <div class="fc-pills" id="fc-pills"></div>
+    <div id="timeline-content"></div>
+  </div>
+
+  <div class="section-view" id="view-changes">
+    <div class="fc-pills" id="fc-pills-changes"></div>
+    <div id="changes-content"></div>
+  </div>
 
   <script>
     const CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRgqmVRirhaQ3AKoXv3nRKc1VK7DFlEkUQgfCLBINLi0nYD7zeapoRu7lY4pYP87MarrwiboOXjtzmf/pub?gid=828115213&single=true&output=csv';
@@ -49,19 +74,15 @@
       'MN-S': { bg:'#F1EFE8', border:'#5F5E5A', text:'#444441' },
     };
     const DEFAULT_COLOR = { bg:'#F1EFE8', border:'#5F5E5A', text:'#444441' };
-
     const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-    // Parse "May 2026" or "March 2026" → Date object
     function parseMonthLabel(label) {
       const parts = label.trim().split(' ');
       if(parts.length !== 2) return null;
       const monthStr = parts[0];
       const year = parseInt(parts[1]);
-      // Try short name first
       let idx = MONTH_NAMES.findIndex(m => monthStr.startsWith(m));
       if(idx === -1) {
-        // Try full name
         const fullNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
         idx = fullNames.findIndex(m => m === monthStr);
       }
@@ -69,16 +90,18 @@
       return new Date(year, idx, 1);
     }
 
-    // Format Date → "May 2026"
-    function formatMonth(d) {
-      return MONTH_NAMES[d.getMonth()] + ' ' + d.getFullYear();
-    }
+    function formatMonth(d) { return MONTH_NAMES[d.getMonth()] + ' ' + d.getFullYear(); }
 
-    // Generate canonical 12-month list: Mar 2026 → Feb 2027
     const MONTHS = [];
     for(let i = 0; i < 12; i++) {
-      const d = new Date(2026, 2 + i, 1); // starts March 2026
-      MONTHS.push(formatMonth(d));
+      MONTHS.push(formatMonth(new Date(2026, 2 + i, 1)));
+    }
+
+    // Next 3 months from today
+    const today = new Date();
+    const UPCOMING_MONTHS = [];
+    for(let i = 0; i < 4; i++) {
+      UPCOMING_MONTHS.push(formatMonth(new Date(today.getFullYear(), today.getMonth() + i, 1)));
     }
 
     function parseCSV(text) {
@@ -95,9 +118,14 @@
       });
     }
 
-    let allData = {}, selectedFC = null, allFCs = [];
+    let allData = {}, selectedFC = null, selectedChangesFC = null, allFCs = [];
 
     function getColor(coman) { return COMAN_COLORS[coman] || DEFAULT_COLOR; }
+
+    function comanBadge(coman) {
+      const col = getColor(coman);
+      return `<span class="coman-badge" style="background:${col.bg};color:${col.text};">${coman}</span>`;
+    }
 
     function renderBlock(comans) {
       const total = comans.reduce((s,c)=>s+c.count,0);
@@ -119,15 +147,20 @@
       return sa.every((x,i) => x.coman === sb[i].coman && x.count === sb[i].count);
     }
 
-    function render() {
-      const content = document.getElementById('content');
+    function switchTab(tab) {
+      document.querySelectorAll('.top-tab').forEach((t,i) => t.classList.toggle('active', (i===0&&tab==='timeline')||(i===1&&tab==='changes')));
+      document.getElementById('view-timeline').classList.toggle('active', tab==='timeline');
+      document.getElementById('view-changes').classList.toggle('active', tab==='changes');
+    }
+
+    function renderTimeline() {
+      const content = document.getElementById('timeline-content');
       content.innerHTML = '';
       const fcsToShow = selectedFC ? [selectedFC] : allFCs;
 
       fcsToShow.forEach(fc => {
         const section = document.createElement('div');
         section.className = 'fc-section';
-
         let html = `<div class="fc-title">${fc}</div><div class="timeline">`;
         html += '<div class="month-headers"><div style="width:110px;flex-shrink:0;"></div>';
         MONTHS.forEach(m => { html += `<div class="month-header">${m}</div>`; });
@@ -142,18 +175,13 @@
             const changed = mi > 0 && !blocksEqual(prevComans, comans);
             html += '<div class="month-block-wrap">';
             if(mi > 0) html += `<span class="arrow${changed?' changed':''}">→</span>`;
-            if(comans.length === 0) {
-              html += '<div class="empty-block"></div>';
-            } else {
-              html += renderBlock(comans);
-            }
+            html += comans.length === 0 ? '<div class="empty-block"></div>' : renderBlock(comans);
             html += '</div>';
           });
           html += '</div></div>';
         });
         html += '</div>';
 
-        // Legend for this FC
         const seenComans = new Set();
         Object.values(allData[fc]||{}).forEach(r => Object.values(r).forEach(cs => cs.forEach(c => seenComans.add(c.coman))));
         html += '<div class="legend">';
@@ -168,6 +196,46 @@
       });
     }
 
+    function renderChanges() {
+      const content = document.getElementById('changes-content');
+      content.innerHTML = '';
+      const fcsToShow = selectedChangesFC ? [selectedChangesFC] : allFCs;
+      const changes = [];
+
+      fcsToShow.forEach(fc => {
+        Object.keys(allData[fc]||{}).sort().forEach(recipe => {
+          UPCOMING_MONTHS.forEach((month, mi) => {
+            if(mi === 0) return;
+            const prevMonth = UPCOMING_MONTHS[mi-1];
+            const curr = (allData[fc][recipe][month]||[]).sort((a,b)=>b.count-a.count);
+            const prev = (allData[fc][recipe][prevMonth]||[]).sort((a,b)=>b.count-a.count);
+            if(curr.length > 0 && prev.length > 0 && !blocksEqual(prev, curr)) {
+              changes.push({ fc, recipe, month, prev, curr });
+            }
+          });
+        });
+      });
+
+      if(changes.length === 0) {
+        content.innerHTML = '<div class="fc-section"><p class="no-changes">No coman changes in the next 3 months.</p></div>';
+        return;
+      }
+
+      const section = document.createElement('div');
+      section.className = 'fc-section';
+      let html = '<table class="changes-table"><thead><tr><th>FC</th><th>Recipe</th><th>Month</th><th>Change</th></tr></thead><tbody>';
+
+      changes.forEach(c => {
+        const fromStr = c.prev.map(p => comanBadge(p.coman) + (c.prev.length > 1 ? ` <small style="color:#aaa">${p.count} SKUs</small>` : '')).join(' + ');
+        const toStr = c.curr.map(p => comanBadge(p.coman) + (c.curr.length > 1 ? ` <small style="color:#aaa">${p.count} SKUs</small>` : '')).join(' + ');
+        html += `<tr><td style="font-weight:500">${c.fc}</td><td>${c.recipe}</td><td style="color:#888">${c.month}</td><td>${fromStr}<span class="change-arrow">→</span>${toStr}</td></tr>`;
+      });
+
+      html += '</tbody></table>';
+      section.innerHTML = html;
+      content.appendChild(section);
+    }
+
     fetch(CSV)
       .then(r => r.text())
       .then(text => {
@@ -177,8 +245,8 @@
           if(!fc||!recipe||!rawMonth||!coman) return;
           const d = parseMonthLabel(rawMonth);
           if(!d) return;
-          const month = formatMonth(d); // normalize to "May 2026" format
-          if(!MONTHS.includes(month)) return; // only include our 12 months
+          const month = formatMonth(d);
+          if(!MONTHS.includes(month) && !UPCOMING_MONTHS.includes(month)) return;
           if(!allData[fc]) allData[fc] = {};
           if(!allData[fc][recipe]) allData[fc][recipe] = {};
           if(!allData[fc][recipe][month]) allData[fc][recipe][month] = [];
@@ -188,22 +256,27 @@
         allFCs = Object.keys(allData).sort();
         document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
 
-        const pills = document.getElementById('fc-pills');
-        const allPill = document.createElement('div');
-        allPill.className = 'fc-pill active';
-        allPill.textContent = 'All FCs';
-        allPill.onclick = () => { selectedFC = null; document.querySelectorAll('.fc-pill').forEach(p=>p.classList.remove('active')); allPill.classList.add('active'); render(); };
-        pills.appendChild(allPill);
+        function buildPills(containerId, onClick) {
+          const pills = document.getElementById(containerId);
+          const allPill = document.createElement('div');
+          allPill.className = 'fc-pill active';
+          allPill.textContent = 'All FCs';
+          allPill.onclick = () => { onClick(null); document.querySelectorAll(`#${containerId} .fc-pill`).forEach(p=>p.classList.remove('active')); allPill.classList.add('active'); };
+          pills.appendChild(allPill);
+          allFCs.forEach(fc => {
+            const pill = document.createElement('div');
+            pill.className = 'fc-pill';
+            pill.textContent = fc;
+            pill.onclick = () => { onClick(fc); document.querySelectorAll(`#${containerId} .fc-pill`).forEach(p=>p.classList.remove('active')); pill.classList.add('active'); };
+            pills.appendChild(pill);
+          });
+        }
 
-        allFCs.forEach(fc => {
-          const pill = document.createElement('div');
-          pill.className = 'fc-pill';
-          pill.textContent = fc;
-          pill.onclick = () => { selectedFC = fc; document.querySelectorAll('.fc-pill').forEach(p=>p.classList.remove('active')); pill.classList.add('active'); render(); };
-          pills.appendChild(pill);
-        });
+        buildPills('fc-pills', fc => { selectedFC = fc; renderTimeline(); });
+        buildPills('fc-pills-changes', fc => { selectedChangesFC = fc; renderChanges(); });
 
-        render();
+        renderTimeline();
+        renderChanges();
       })
       .catch(err => { document.getElementById('status').textContent = 'Could not load: ' + err.message; });
   </script>
