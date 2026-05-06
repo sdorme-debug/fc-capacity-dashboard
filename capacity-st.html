@@ -7,6 +7,8 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f9f8; color: #1a1a1a; padding: 24px; }
+    h1 { font-size: 16px; font-weight: 500; color: #444; margin-bottom: 4px; }
+    .subtitle { font-size: 12px; color: #888; margin-bottom: 20px; }
     .fc-pills { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; }
     .fc-pill { font-size:11px; padding:4px 12px; border-radius:20px; border:0.5px solid #ccc; cursor:pointer; background:#f1f0e8; color:#5f5e5a; transition:all 0.15s; }
     .fc-pill.active { background:#1a1a1a; color:#fff; border-color:#1a1a1a; }
@@ -20,13 +22,12 @@
     td { padding:5px 6px; text-align:center; }
     td.row-label { text-align:left; font-size:11px; color:#888; white-space:nowrap; }
     .val-cell { background:#f9f9f8; border-radius:6px; padding:5px 4px; font-size:13px; font-weight:500; display:block; }
-    .val-ok { color:#27ae60; }
-    .val-warn { color:#e67e22; }
-    .val-bad { color:#c0392b; }
   </style>
 </head>
 <body>
-  <p class="status" id="status">Loading...</p>
+  <h1>Short term freezer capacity</h1>
+  <p class="subtitle" id="subtitle">Loading...</p>
+  <p class="status" id="status"></p>
   <div class="fc-pills" id="fc-pills"></div>
   <div id="content"></div>
 
@@ -77,27 +78,7 @@
         weeks.forEach(w => { html += '<th>'+w.replace('/2026','')+'</th>'; });
         html += '</tr></thead><tbody>';
 
-        // OH Pallets row
-        if(d.oh) {
-          html += '<tr><td class="row-label">OH Pallets</td>';
-          d.oh.forEach(v => {
-            const n = Math.round(parseFloat(v)||0);
-            html += '<td><span class="val-cell" style="color:var(--color-text-primary);">'+n.toLocaleString()+'</span></td>';
-          });
-          html += '</tr>';
-        }
-
-        // Capacity row
-        if(d.capacity) {
-          html += '<tr><td class="row-label">Max Capacity</td>';
-          d.capacity.forEach(v => {
-            const n = Math.round(parseFloat(v)||0);
-            html += '<td><span class="val-cell" style="color:#aaa;">'+n.toLocaleString()+'</span></td>';
-          });
-          html += '</tr>';
-        }
-
-        // Utilization row
+        // Row 1: Utilization %
         if(d.util) {
           html += '<tr><td class="row-label">Utilization %</td>';
           d.util.forEach(v => {
@@ -107,9 +88,9 @@
           html += '</tr>';
         }
 
-        // Remaining slots row
+        // Row 2: Net Avail Pallets (remaining)
         if(d.remaining) {
-          html += '<tr><td class="row-label">Remaining Slots</td>';
+          html += '<tr><td class="row-label">Net Avail Pallets</td>';
           d.remaining.forEach(v => {
             const n = Math.round(parseFloat(v)||0);
             html += '<td><span class="val-cell" style="color:'+remainingColor(n)+';">'+n.toLocaleString()+'</span></td>';
@@ -136,7 +117,8 @@
           allData[fc][type] = r.slice(2);
         });
 
-        document.getElementById('status').textContent='Live from Google Sheets · refreshes on page load';
+        document.getElementById('subtitle').textContent = 'Next 5 weeks · ' + weeks[0] + ' – ' + weeks[weeks.length-1];
+        document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
 
         const pillsEl=document.getElementById('fc-pills');
         const allPill=document.createElement('div');
@@ -155,7 +137,7 @@
 
         render();
       })
-      .catch(err=>{document.getElementById('status').textContent='Could not load: '+err.message;});
+      .catch(err=>{document.getElementById('subtitle').textContent='Could not load: '+err.message;});
   </script>
 </body>
 </html>
