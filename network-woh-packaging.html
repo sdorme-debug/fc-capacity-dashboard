@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Network WOH — Packaging</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f9f8; color: #1a1a1a; padding: 24px; }
+    h1 { font-size: 16px; font-weight: 500; color: #444; margin-bottom: 4px; }
+    .subtitle { font-size: 12px; color: #888; margin-bottom: 16px; }
+    .status { font-size: 11px; color: #aaa; margin-bottom: 12px; }
+    .recipe-section { margin-bottom: 10px; background: #fff; border: 0.5px solid rgba(0,0,0,0.1); border-radius: 12px; overflow: hidden; }
+    .recipe-header { font-size: 12px; font-weight: 500; color: #444; padding: 8px 16px; background: #f9f9f8; border-bottom: 0.5px solid rgba(0,0,0,0.08); }
+    .sku-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+    .sku-cell { padding: 8px 16px; border-bottom: 0.5px solid rgba(0,0,0,0.04); border-right: 0.5px solid rgba(0,0,0,0.04); }
+    .sku-name { font-size: 10px; color: #aaa; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sku-woh { font-size: 15px; font-weight: 500; }
+    .woh-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 3px; vertical-align: middle; }
+    .c-oos { color: #791F1F; } .c-critical { color: #A32D2D; }
+    .c-atrisk { color: #BA7517; } .c-ok { color: #27ae60; } .c-good { color: #1D9E75; }
+  </style>
+</head>
+<body>
+  <h1>Network WOH — Packaging</h1>
+  <p class="subtitle" id="subtitle">Loading...</p>
+  <p class="status" id="status"></p>
+  <div id="content"></div>
+  <script>
+    const CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS5UGXu44UBGjQp-RWXHUmU1r1EEnbVEHtwi952lTKGfWEWUdCLwgEvytyXCfWtrTtJgn0DGb5qUavg/pub?gid=552345443&single=true&output=csv';
+
+    function parseCSV(text) {
+      return text.trim().split('\n').map(r => {
+        const cols=[]; let cur='', inQ=false;
+        for(let i=0;i<r.length;i++){
+          const ch=r[i];
+          if(ch==='"'){inQ=!inQ;}
+          else if(ch===','&&!inQ){cols.push(cur.trim());cur='';}
+          else{cur+=ch;}
+        }
+        cols.push(cur.trim());
+        return cols;
+      });
+    }
+
+    function wohClass(v) {
+      if(v<=0) return 'c-oos';
+      if(v<1) return 'c-critical';
+      if(v<2) return 'c-atrisk';
+      if(v<4) return 'c-ok';
+      return 'c-good';
+    }
+
+    function dotColor(v) {
+      if(v<=0) return '#791F1F';
+      if(v<1) return '#A32D2D';
+      if(v<2) return '#BA7517';
+      if(v<4) return '#27ae60';
+      return '#1D9E75';
+    }
+
+    fetch(CSV).then(r=>r.text()).then(text=>{
+      const rows = parseCSV(text).slice(1);
+      const week = rows[0] ? rows[0][3] : '';
+      document.getElementById('subtitle').textContent = 'Week of ' + week;
+      document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
+
+      const groups = {}, groupOrder = [];
+      rows.forEach(r => {
+        let cat = r[0]||'Other';
+        if(cat.includes(' : ')) cat = cat.split(' : ')[0].trim();
+        const sku = r[1], woh = parseFloat(r[2]);
+        if(!sku||isNaN(woh)) return;
+        if(!groups[cat]){ groups[cat]=[]; groupOrder.push(cat); }
+        groups[cat].push({sku, woh});
+      });
+
+      const seen = new Set();
+      const deduped = groupOrder.filter(g => { if(seen.has(g)) return false; seen.add(g); return true; });
+
+      let html = '';
+      deduped.forEach(cat => {
+        const skus = groups[cat].sort((a,b)=>a.woh-b.woh);
+        html += '<div class="recipe-section">';
+        html += '<div class="recipe-header">'+cat+'</div>';
+        html += '<div class="sku-grid">';
+        skus.forEach(s => {
+          html += '<div class="sku-cell">';
+          html += '<div class="sku-name" title="'+s.sku+'">'+s.sku+'</div>';
+          html += '<div class="sku-woh '+wohClass(s.woh)+'"><span class="woh-dot" style="background:'+dotColor(s.woh)+';"></span>'+s.woh.toFixed(1)+'</div>';
+          html += '</div>';
+        });
+        html += '</div></div>';
+      });
+
+      document.getElementById('content').innerHTML = html;
+    }).catch(err=>{ document.getElementById('status').textContent='Could not load: '+err.message; });
+  </script>
+</body>
+</html>
