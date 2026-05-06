@@ -33,7 +33,22 @@
     const ST_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRgqmVRirhaQ3AKoXv3nRKc1VK7DFlEkUQgfCLBINLi0nYD7zeapoRu7lY4pYP87MarrwiboOXjtzmf/pub?gid=811823167&single=true&output=csv';
     const FC_ORDER = ['EWR','FTW','JAX','MKE','MEM','OAK','RNO','SMF'];
     const FC_COLORS = { EWR:'#378ADD', FTW:'#7F77DD', JAX:'#BA7517', MKE:'#D85A30', MEM:'#1D9E75', OAK:'#D4537E', RNO:'#639922', SMF:'#888780' };
-    function parseCSV(t) { return t.trim().split('\n').map(r => r.split(',').map(c => c.trim().replace(/^"|"$/g,''))); }
+
+    function parseCSV(text) {
+      return text.trim().split('\n').map(row => {
+        const cols = [];
+        let cur = '', inQ = false;
+        for (let i = 0; i < row.length; i++) {
+          const ch = row[i];
+          if (ch === '"') { inQ = !inQ; }
+          else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+          else { cur += ch; }
+        }
+        cols.push(cur.trim());
+        return cols;
+      });
+    }
+
     function utilColor(v) { return v >= 100 ? '#c0392b' : v >= 85 ? '#e67e22' : '#27ae60'; }
     function netColor(v)  { return v < 0 ? '#c0392b' : v < 150 ? '#e67e22' : '#27ae60'; }
     function wohColor(v)  { return v < 2 ? '#c0392b' : v < 3.5 ? '#e67e22' : '#27ae60'; }
@@ -46,6 +61,7 @@
         const utilRows = rows.filter(r => r[0]==='util');
         const netRows  = rows.filter(r => r[0]==='net');
         const wohRows  = rows.filter(r => r[0]==='woh');
+
         document.getElementById('subtitle').textContent = 'Next 5 weeks · ' + weeks[0] + ' – ' + weeks[weeks.length-1];
         document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
         const content = document.getElementById('content');
@@ -56,8 +72,8 @@
           const wRow = wohRows.find(r => r[1]===fc);
           if (!uRow) return;
 
-          const uVals = uRow.slice(2).map(v => parseFloat(v) / 100);
-          const nVals = nRow ? nRow.slice(2).map(v => Math.round(parseFloat(v))) : [];
+          const uVals = uRow.slice(2).map(v => Math.round(parseFloat(v) * 10000) / 100);
+          const nVals = nRow ? nRow.slice(2).map(v => Math.round(parseFloat(v.replace(/,/g,'')))) : [];
           const wVals = wRow ? wRow.slice(2).map(v => parseFloat(v).toFixed(1)) : [];
 
           const card = document.createElement('div');
