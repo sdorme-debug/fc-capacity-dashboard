@@ -97,16 +97,30 @@
         const utilRows = rows.filter(r => r[0]==='util');
         const netRows  = rows.filter(r => r[0]==='net');
 
-        // Filter to months >= cutoff
-        const validIndices = allMonths.map((m, i) => {
-          const d = parseMonthLabel(m);
-          return d && d >= cutoff ? i : null;
-        }).filter(i => i !== null);
+        // Parse all month labels sequentially, incrementing year when month wraps
+const parsedDates = [];
+let year = today.getFullYear();
+let lastMonthIdx = -1;
+allMonths.forEach(m => {
+  const slashMatch = m.match(/^(\d{1,2})\/\d{1,2}\/(\d{4})$/);
+  if (slashMatch) {
+    parsedDates.push(new Date(parseInt(slashMatch[2]), parseInt(slashMatch[1]) - 1, 1));
+    lastMonthIdx = parseInt(slashMatch[1]) - 1;
+    year = parseInt(slashMatch[2]);
+  } else {
+    const monthIdx = MONTH_NAMES.indexOf(m.trim());
+    if (monthIdx !== -1) {
+      if (monthIdx <= lastMonthIdx) year++;
+      lastMonthIdx = monthIdx;
+      parsedDates.push(new Date(year, monthIdx, 1));
+    } else {
+      parsedDates.push(null);
+    }
+  }
+});
 
-        const months = validIndices.map(i => {
-          const d = parseMonthLabel(allMonths[i]);
-          return d ? formatMonthLabel(d) : allMonths[i];
-        });
+const validIndices = parsedDates.map((d, i) => d && d >= cutoff ? i : null).filter(i => i !== null);
+const months = validIndices.map(i => parsedDates[i] ? formatMonthLabel(parsedDates[i]) : allMonths[i]);
 
         if (months.length === 0) {
           document.getElementById('subtitle').textContent = 'No data available beyond 2 months out — check Dashboard Export tab';
