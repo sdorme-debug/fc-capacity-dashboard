@@ -11,20 +11,21 @@
     .subtitle { font-size: 12px; color: #888; margin-bottom: 20px; }
     .status { font-size: 11px; color: #aaa; margin-top: 16px; }
     .error { color: #c0392b; font-size: 13px; padding: 12px; background: #fdf0ee; border-radius: 8px; }
-    .section-title { font-size: 13px; font-weight: 500; color: #444; margin: 24px 0 12px; }
+    .section-title { font-size: 13px; font-weight: 500; color: #444; margin: 24px 0 4px; }
     .section-desc { font-size: 11px; color: #888; margin-bottom: 12px; }
     .chart-card { background: #fff; border: 0.5px solid rgba(0,0,0,0.1); border-radius: 12px; padding: 20px; margin-bottom: 16px; overflow-x: auto; }
-    table { border-collapse: collapse; font-size: 11px; min-width: 100%; }
-    th { padding: 6px 8px; color: #888; font-weight: 500; text-align: center; border-bottom: 0.5px solid rgba(0,0,0,0.1); white-space: nowrap; }
-    th.row-head { text-align: left; min-width: 80px; }
-    td { padding: 5px 6px; text-align: center; border-bottom: 0.5px solid rgba(0,0,0,0.05); }
-    td.row-head { text-align: left; font-size: 11px; color: #444; white-space: nowrap; font-weight: 500; }
-    td.day-label { text-align: left; font-size: 11px; color: #888; padding-left: 16px; white-space: nowrap; }
-    .cell-ok { background: #eaf3de; color: #3b6d11; border-radius: 4px; padding: 3px 6px; display: inline-block; min-width: 36px; }
-    .cell-over { background: #fcebeb; color: #a32d2d; border-radius: 4px; padding: 3px 6px; display: inline-block; min-width: 36px; font-weight: 500; }
-    .cell-zero { color: #ccc; }
-    .cell-empty { color: #eee; }
-    .legend { display: flex; gap: 16px; margin-bottom: 12px; font-size: 11px; color: #888; align-items: center; }
+    table { border-collapse: collapse; font-size: 11px; width: 100%; }
+    th { padding: 6px 10px; color: #888; font-weight: 500; text-align: center; border-bottom: 0.5px solid rgba(0,0,0,0.1); white-space: nowrap; font-size: 11px; }
+    th.left { text-align: left; }
+    td { padding: 4px 10px; text-align: center; border-bottom: 0.5px solid rgba(0,0,0,0.04); }
+    td.fc-cell { font-weight: 500; font-size: 11px; color: #444; text-align: left; white-space: nowrap; }
+    td.day-cell { color: #888; font-size: 11px; text-align: left; }
+    td.appts-cell { color: #aaa; font-size: 11px; }
+    .fc-divider td { border-top: 1px solid rgba(0,0,0,0.08); }
+    .cell-ok { background: #eaf3de; color: #3b6d11; border-radius: 4px; padding: 2px 8px; display: inline-block; min-width: 28px; font-size: 11px; }
+    .cell-over { background: #fcebeb; color: #a32d2d; border-radius: 4px; padding: 2px 8px; display: inline-block; min-width: 28px; font-size: 11px; font-weight: 500; }
+    .cell-zero { color: #ddd; font-size: 11px; }
+    .legend { display: flex; gap: 16px; margin-bottom: 10px; font-size: 11px; color: #888; align-items: center; }
     .legend-item { display: flex; align-items: center; gap: 5px; }
     .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
   </style>
@@ -33,17 +34,17 @@
   <h1>FC inbound forecast</h1>
   <p class="subtitle" id="subtitle">Loading...</p>
 
-  <div class="section-title">FCST overages — current planned POs vs available appointments</div>
-  <p class="section-desc">Days where confirmed PO volume exceeds available appointment slots. These need immediate attention.</p>
+  <div class="section-title">FCST overages — confirmed POs vs available appointments</div>
+  <p class="section-desc">Days where confirmed PO volume exceeds available slots. These need immediate attention.</p>
   <div class="legend">
     <div class="legend-item"><span class="legend-dot" style="background:#eaf3de;border:0.5px solid #639922;"></span>Within capacity</div>
     <div class="legend-item"><span class="legend-dot" style="background:#fcebeb;border:0.5px solid #a32d2d;"></span>Over capacity</div>
   </div>
-  <div class="chart-card" id="fcst-card"><p style="color:#aaa;font-size:12px;">Loading...</p></div>
+  <div class="chart-card" id="fcst-card"><p style="color:#aaa;">Loading...</p></div>
 
   <div class="section-title">Planned overages — forward looking appointment needs</div>
-  <p class="section-desc">Where forecasted inbound volume exceeds available slots. Share with the appointments team to request additional capacity.</p>
-  <div class="chart-card" id="planned-card"><p style="color:#aaa;font-size:12px;">Loading...</p></div>
+  <p class="section-desc">Where forecasted volume exceeds available slots. Share with the appointments team to request additional capacity.</p>
+  <div class="chart-card" id="planned-card"><p style="color:#aaa;">Loading...</p></div>
 
   <p class="status" id="status"></p>
 
@@ -67,12 +68,11 @@
     }
 
     function cellHTML(val, appts) {
-      if (val === '' || val === null || isNaN(val)) return '<span class="cell-empty">—</span>';
-      if (val === 0) return '<span class="cell-zero">0</span>';
+      if (val === '' || val === null || isNaN(val) || val === 0) return '<span class="cell-zero">—</span>';
       const over = val > appts;
-      const diff = over ? '+' + (val - appts) : '';
       const cls = over ? 'cell-over' : 'cell-ok';
-      return '<span class="' + cls + '">' + val + (over ? ' <small>('+diff+')</small>' : '') + '</span>';
+      const label = over ? val + ' <small>(+' + (val - appts) + ')</small>' : val;
+      return '<span class="' + cls + '">' + label + '</span>';
     }
 
     fetch(CSV_URL)
@@ -81,83 +81,52 @@
         const rows = parseCSV(text);
         const headers = rows[0];
 
-        // Find FCST and Planned column indices
         const fcstCols = headers.map((h,i) => h.startsWith('FCST_') ? { idx: i, date: h.replace('FCST_','') } : null).filter(Boolean);
-        const plannedCols = headers.map((h,i) => h.startsWith('Planned_') ? { idx: i, date: h.replace('Planned_','') } : null).filter(Boolean);
+        const plannedCols = headers.map((h,i) => h.startsWith('Planned_') ? { idx: i, date: h.replace('Planned_','') } : null).filter(Boolean).slice(0, 16);
 
-        // Build lookup: fc+day -> row
         const lookup = {};
         rows.slice(1).forEach(r => {
-          const fc = r[0], day = r[1], appts = parseInt(r[2]) || 0;
-          lookup[fc+'_'+day] = { appts, vals: r };
+          lookup[r[0]+'_'+r[1]] = { appts: parseInt(r[2])||0, vals: r };
         });
 
         document.getElementById('subtitle').textContent = 'Live from Google Sheets · refreshes on page load';
         document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
 
-        // FCST TABLE
-        let fcstHTML = '<table><thead><tr><th class="row-head">FC</th><th class="row-head">Day</th><th>Appts</th>';
-        fcstCols.forEach(c => { fcstHTML += '<th>' + c.date + '</th>'; });
-        fcstHTML += '</tr></thead><tbody>';
+        function buildTable(cols) {
+          let html = '<table><thead><tr>';
+          html += '<th class="left">FC</th><th class="left">Day</th><th>Appts</th>';
+          cols.forEach(c => { html += '<th>' + c.date + '</th>'; });
+          html += '</tr></thead><tbody>';
 
-        FC_ORDER.forEach(fc => {
-          DAY_ORDER.forEach((day, di) => {
-            const key = fc + '_' + day;
-            const row = lookup[key];
-            if (!row) return;
-            const appts = row.appts;
-            if (appts === 0) return; // skip days with no appts
+          FC_ORDER.forEach((fc, fcIdx) => {
+            DAY_ORDER.forEach((day, dayIdx) => {
+              const row = lookup[fc+'_'+day];
+              if (!row || row.appts === 0) return;
+              const hasData = cols.some(c => parseFloat(row.vals[c.idx]) > 0);
+              if (!hasData) return;
 
-            // Check if any FCST value is over
-            const hasData = fcstCols.some(c => parseFloat(row.vals[c.idx]) > 0);
-            if (!hasData) return;
-
-            fcstHTML += '<tr>';
-            fcstHTML += di === 0 ? '<td class="row-head" rowspan="6">' + fc + '</td>' : '';
-            fcstHTML += '<td class="day-label">' + day + '</td><td style="color:#888;font-size:11px;">' + appts + '</td>';
-            fcstCols.forEach(c => {
-              const val = parseFloat(row.vals[c.idx]);
-              fcstHTML += '<td>' + cellHTML(isNaN(val) ? '' : val, appts) + '</td>';
+              const isDivider = dayIdx === 0;
+              html += '<tr' + (isDivider ? ' class="fc-divider"' : '') + '>';
+              html += '<td class="fc-cell">' + (dayIdx === 0 ? fc : '') + '</td>';
+              html += '<td class="day-cell">' + day + '</td>';
+              html += '<td class="appts-cell">' + row.appts + '</td>';
+              cols.forEach(c => {
+                const val = parseFloat(row.vals[c.idx]);
+                html += '<td>' + cellHTML(isNaN(val) ? 0 : val, row.appts) + '</td>';
+              });
+              html += '</tr>';
             });
-            fcstHTML += '</tr>';
           });
-        });
-        fcstHTML += '</tbody></table>';
-        document.getElementById('fcst-card').innerHTML = fcstHTML;
 
-        // PLANNED HEATMAP — only show overages, limit to next 12 weeks
-        const limitedPlanned = plannedCols.slice(0, 16);
+          html += '</tbody></table>';
+          return html;
+        }
 
-        let plannedHTML = '<table><thead><tr><th class="row-head">FC</th><th class="row-head">Day</th><th>Appts</th>';
-        limitedPlanned.forEach(c => { plannedHTML += '<th>' + c.date + '</th>'; });
-        plannedHTML += '</tr></thead><tbody>';
-
-        FC_ORDER.forEach(fc => {
-          DAY_ORDER.forEach((day, di) => {
-            const key = fc + '_' + day;
-            const row = lookup[key];
-            if (!row) return;
-            const appts = row.appts;
-            if (appts === 0) return;
-
-            const hasData = limitedPlanned.some(c => parseFloat(row.vals[c.idx]) > 0);
-            if (!hasData) return;
-
-            plannedHTML += '<tr>';
-            plannedHTML += di === 0 ? '<td class="row-head">' + fc + '</td>' : '<td class="row-head"></td>';
-            plannedHTML += '<td class="day-label">' + day + '</td><td style="color:#888;font-size:11px;">' + appts + '</td>';
-            limitedPlanned.forEach(c => {
-              const val = parseFloat(row.vals[c.idx]);
-              plannedHTML += '<td>' + cellHTML(isNaN(val) ? '' : val, appts) + '</td>';
-            });
-            plannedHTML += '</tr>';
-          });
-        });
-        plannedHTML += '</tbody></table>';
-        document.getElementById('planned-card').innerHTML = plannedHTML;
+        document.getElementById('fcst-card').innerHTML = buildTable(fcstCols);
+        document.getElementById('planned-card').innerHTML = buildTable(plannedCols);
       })
       .catch(err => {
-        document.getElementById('fcst-card').innerHTML = '<div class="error">Could not load data: ' + err.message + '</div>';
+        document.getElementById('fcst-card').innerHTML = '<div class="error">Could not load: ' + err.message + '</div>';
       });
   </script>
 </body>
