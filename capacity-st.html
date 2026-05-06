@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Short Term Capacity</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f9f8; color: #1a1a1a; padding: 24px; }
+    .fc-pills { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; }
+    .fc-pill { font-size:11px; padding:4px 12px; border-radius:20px; border:0.5px solid #ccc; cursor:pointer; background:#f1f0e8; color:#5f5e5a; transition:all 0.15s; }
+    .fc-pill.active { background:#1a1a1a; color:#fff; border-color:#1a1a1a; }
+    .status { font-size:11px; color:#aaa; margin-bottom:12px; }
+    .fc-card { background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:12px; padding:16px 20px; margin-bottom:10px; }
+    .fc-header { display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:14px; font-weight:500; color:#333; }
+    .fc-dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+    table { width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed; }
+    th { font-size:11px; color:#888; font-weight:400; text-align:center; padding:4px 6px 8px; border-bottom:0.5px solid rgba(0,0,0,0.08); }
+    th.left { text-align:left; width:140px; }
+    td { padding:5px 6px; text-align:center; }
+    td.row-label { text-align:left; font-size:11px; color:#888; white-space:nowrap; }
+    .val-cell { background:#f9f9f8; border-radius:6px; padding:5px 4px; font-size:13px; font-weight:500; display:block; }
+    .val-ok { color:#27ae60; }
+    .val-warn { color:#e67e22; }
+    .val-bad { color:#c0392b; }
+  </style>
+</head>
+<body>
+  <p class="status" id="status">Loading...</p>
+  <div class="fc-pills" id="fc-pills"></div>
+  <div id="content"></div>
+
+  <script>
+    const CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS1nWgrsa3Ek5z-kZlahiqpWT6soZ_8QkpdAH_QCCgeNTATh6oNYHi5BPTMnjZFAyDQH1C9Nv68F4Y_/pub?gid=2001304532&single=true&output=csv';
+
+    const FC_ORDER = ['EWR (FC+offsite)','EWR','MEM','FTW','RNO','SMF','JAX','MKE'];
+    const FC_COLORS = {
+      'EWR (FC+offsite)': '#378ADD', 'EWR': '#85B7EB',
+      'MEM': '#1D9E75', 'FTW': '#7F77DD', 'RNO': '#639922',
+      'SMF': '#888780', 'JAX': '#BA7517', 'MKE': '#D85A30',
+    };
+
+    function parseCSV(text) {
+      return text.trim().split('\n').map(r => {
+        const cols=[]; let cur='', inQ=false;
+        for(let i=0;i<r.length;i++){
+          const ch=r[i];
+          if(ch==='"'){inQ=!inQ;}
+          else if(ch===','&&!inQ){cols.push(cur.trim());cur='';}
+          else{cur+=ch;}
+        }
+        cols.push(cur.trim());
+        return cols;
+      });
+    }
+
+    function utilColor(v) { return v>=100?'#c0392b':v>=85?'#e67e22':'#27ae60'; }
+    function remainingColor(v) { return v<0?'#c0392b':v<200?'#e67e22':'#27ae60'; }
+
+    let allData={}, weeks=[], selectedFC=null;
+
+    function render() {
+      const content = document.getElementById('content');
+      content.innerHTML = '';
+      const fcsToShow = selectedFC ? [selectedFC] : FC_ORDER;
+
+      fcsToShow.forEach(fc => {
+        const d = allData[fc];
+        if(!d) return;
+
+        const card = document.createElement('div');
+        card.className = 'fc-card';
+        const color = FC_COLORS[fc]||'#888';
+
+        let html = '<div class="fc-header"><span class="fc-dot" style="background:'+color+'"></span>'+fc+'</div>';
+        html += '<table><thead><tr><th class="left"></th>';
+        weeks.forEach(w => { html += '<th>'+w.replace('/2026','')+'</th>'; });
+        html += '</tr></thead><tbody>';
+
+        // OH Pallets row
+        if(d.oh) {
+          html += '<tr><td class="row-label">OH Pallets</td>';
+          d.oh.forEach(v => {
+            const n = Math.round(parseFloat(v)||0);
+            html += '<td><span class="val-cell" style="color:var(--color-text-primary);">'+n.toLocaleString()+'</span></td>';
+          });
+          html += '</tr>';
+        }
+
+        // Capacity row
+        if(d.capacity) {
+          html += '<tr><td class="row-label">Max Capacity</td>';
+          d.capacity.forEach(v => {
+            const n = Math.round(parseFloat(v)||0);
+            html += '<td><span class="val-cell" style="color:#aaa;">'+n.toLocaleString()+'</span></td>';
+          });
+          html += '</tr>';
+        }
+
+        // Utilization row
+        if(d.util) {
+          html += '<tr><td class="row-label">Utilization %</td>';
+          d.util.forEach(v => {
+            const n = Math.round(parseFloat(v)*100);
+            html += '<td><span class="val-cell" style="color:'+utilColor(n)+';">'+n+'%</span></td>';
+          });
+          html += '</tr>';
+        }
+
+        // Remaining slots row
+        if(d.remaining) {
+          html += '<tr><td class="row-label">Remaining Slots</td>';
+          d.remaining.forEach(v => {
+            const n = Math.round(parseFloat(v)||0);
+            html += '<td><span class="val-cell" style="color:'+remainingColor(n)+';">'+n.toLocaleString()+'</span></td>';
+          });
+          html += '</tr>';
+        }
+
+        html += '</tbody></table>';
+        card.innerHTML = html;
+        content.appendChild(card);
+      });
+    }
+
+    fetch(CSV)
+      .then(r=>r.text())
+      .then(text=>{
+        const rows = parseCSV(text);
+        weeks = rows[0].slice(2);
+
+        rows.slice(1).forEach(r => {
+          const type=r[0], fc=r[1];
+          if(!type||!fc) return;
+          if(!allData[fc]) allData[fc]={};
+          allData[fc][type] = r.slice(2);
+        });
+
+        document.getElementById('status').textContent='Live from Google Sheets · refreshes on page load';
+
+        const pillsEl=document.getElementById('fc-pills');
+        const allPill=document.createElement('div');
+        allPill.className='fc-pill active';
+        allPill.textContent='All FCs';
+        allPill.onclick=()=>{selectedFC=null;document.querySelectorAll('.fc-pill').forEach(p=>p.classList.remove('active'));allPill.classList.add('active');render();};
+        pillsEl.appendChild(allPill);
+
+        FC_ORDER.filter(fc=>allData[fc]).forEach(fc=>{
+          const pill=document.createElement('div');
+          pill.className='fc-pill';
+          pill.textContent=fc;
+          pill.onclick=()=>{selectedFC=fc;document.querySelectorAll('.fc-pill').forEach(p=>p.classList.remove('active'));pill.classList.add('active');render();};
+          pillsEl.appendChild(pill);
+        });
+
+        render();
+      })
+      .catch(err=>{document.getElementById('status').textContent='Could not load: '+err.message;});
+  </script>
+</body>
+</html>
