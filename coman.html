@@ -17,18 +17,15 @@
     .fc-section { margin-bottom:20px; background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:12px; padding:16px; overflow-x:auto; }
     .fc-title { font-size:13px; font-weight:500; color:#333; margin-bottom:12px; }
     .timeline { min-width:800px; }
-    .month-headers { display:flex; margin-left:110px; margin-bottom:6px; padding-left:0; }
-.month-header { flex:1; font-size:10px; font-weight:500; color:#888; text-align:center; min-width:0; }
-    .month-header { flex:1; font-size:10px; font-weight:500; color:#888; text-align:center; }
-    .recipe-row { display:flex; align-items:center; margin-bottom:7px; }
-    .recipe-label { width:110px; font-size:11px; color:#888; flex-shrink:0; padding-right:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .months-row { display:flex; flex:1; align-items:center; }
-    .month-block-wrap { flex:1; display:flex; align-items:center; min-width:0; }
+    .timeline-grid { display:grid; grid-template-columns: 110px repeat(12, 1fr); gap:0; }
+    .grid-header { font-size:10px; font-weight:500; color:#888; text-align:center; padding-bottom:6px; }
+    .grid-label { font-size:11px; color:#888; padding-right:8px; display:flex; align-items:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .grid-cell { display:flex; align-items:center; padding:3px 0; }
     .recipe-block { flex:1; height:34px; border-radius:4px; display:flex; overflow:hidden; border:0.5px solid rgba(0,0,0,0.08); }
     .sliver { height:100%; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:600; overflow:hidden; letter-spacing:0.02em; }
     .empty-block { flex:1; height:34px; border-radius:4px; background:#f5f5f3; border:0.5px dashed #ddd; }
-    .arrow { color:#ccc; font-size:11px; flex-shrink:0; padding:0 3px; }
-    .arrow.changed { color:#D85A30; font-weight:600; }
+    .arrow-cell { width:16px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:11px; color:#ccc; }
+    .arrow-cell.changed { color:#D85A30; font-weight:600; }
     .legend { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
     .legend-item { display:flex; align-items:center; gap:4px; font-size:11px; color:#666; }
     .legend-dot { width:10px; height:10px; border-radius:2px; }
@@ -94,16 +91,11 @@
     function formatMonth(d) { return MONTH_NAMES[d.getMonth()] + ' ' + d.getFullYear(); }
 
     const MONTHS = [];
-    for(let i = 0; i < 12; i++) {
-      MONTHS.push(formatMonth(new Date(2026, 2 + i, 1)));
-    }
+    for(let i = 0; i < 12; i++) MONTHS.push(formatMonth(new Date(2026, 2 + i, 1)));
 
-    // Next 3 months from today
     const today = new Date();
     const UPCOMING_MONTHS = [];
-    for(let i = 0; i < 4; i++) {
-      UPCOMING_MONTHS.push(formatMonth(new Date(today.getFullYear(), today.getMonth() + i, 1)));
-    }
+    for(let i = 0; i < 4; i++) UPCOMING_MONTHS.push(formatMonth(new Date(today.getFullYear(), today.getMonth() + i, 1)));
 
     function parseCSV(text) {
       return text.trim().split('\n').map(r => {
@@ -162,26 +154,35 @@
       fcsToShow.forEach(fc => {
         const section = document.createElement('div');
         section.className = 'fc-section';
-        let html = `<div class="fc-title">${fc}</div><div class="timeline">`;
-        html += '<div class="month-headers"><div style="width:110px;flex-shrink:0;"></div>';
-        MONTHS.forEach(m => { html += `<div class="month-header">${m}</div>`; });
-        html += '</div>';
 
+        // Use CSS grid so headers and cells align perfectly
+        let html = `<div class="fc-title">${fc}</div><div class="timeline"><div class="timeline-grid">`;
+
+        // Header row
+        html += '<div class="grid-header"></div>'; // label spacer
+        MONTHS.forEach((m, mi) => {
+          // First month has no arrow so needs full width
+          // Subsequent months share space with arrow
+          html += `<div class="grid-header">${m}</div>`;
+        });
+
+        // Recipe rows
         const recipes = Object.keys(allData[fc] || {}).sort();
         recipes.forEach(recipe => {
-          html += `<div class="recipe-row"><div class="recipe-label" title="${recipe}">${recipe}</div><div class="months-row">`;
+          html += `<div class="grid-label" title="${recipe}">${recipe}</div>`;
           MONTHS.forEach((month, mi) => {
             const comans = (allData[fc][recipe][month] || []).sort((a,b)=>b.count-a.count);
             const prevComans = mi > 0 ? (allData[fc][recipe][MONTHS[mi-1]] || []).sort((a,b)=>b.count-a.count) : [];
             const changed = mi > 0 && !blocksEqual(prevComans, comans);
-            html += '<div class="month-block-wrap">';
-            if(mi > 0) html += `<span class="arrow${changed?' changed':''}" style="width:16px;text-align:center;flex-shrink:0;">→</span>`;
-html += comans.length === 0 ? '<div class="empty-block"></div>' : renderBlock(comans);
-            html += '</div>';
+            html += `<div class="grid-cell">`;
+            if(mi > 0) html += `<div class="arrow-cell${changed?' changed':''}">→</div>`;
+            html += `<div style="flex:1;">`;
+            html += comans.length === 0 ? '<div class="empty-block"></div>' : renderBlock(comans);
+            html += `</div></div>`;
           });
-          html += '</div></div>';
         });
-        html += '</div>';
+
+        html += '</div></div>';
 
         const seenComans = new Set();
         Object.values(allData[fc]||{}).forEach(r => Object.values(r).forEach(cs => cs.forEach(c => seenComans.add(c.coman))));
@@ -257,24 +258,24 @@ html += comans.length === 0 ? '<div class="empty-block"></div>' : renderBlock(co
         allFCs = Object.keys(allData).sort();
         document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
 
-        function buildPills(containerId, onClick) {
+        function buildPills(containerId, onSelect, renderFn) {
           const pills = document.getElementById(containerId);
           const allPill = document.createElement('div');
           allPill.className = 'fc-pill active';
           allPill.textContent = 'All FCs';
-          allPill.onclick = () => { onClick(null); document.querySelectorAll(`#${containerId} .fc-pill`).forEach(p=>p.classList.remove('active')); allPill.classList.add('active'); };
+          allPill.onclick = () => { onSelect(null); document.querySelectorAll(`#${containerId} .fc-pill`).forEach(p=>p.classList.remove('active')); allPill.classList.add('active'); renderFn(); };
           pills.appendChild(allPill);
           allFCs.forEach(fc => {
             const pill = document.createElement('div');
             pill.className = 'fc-pill';
             pill.textContent = fc;
-            pill.onclick = () => { onClick(fc); document.querySelectorAll(`#${containerId} .fc-pill`).forEach(p=>p.classList.remove('active')); pill.classList.add('active'); };
+            pill.onclick = () => { onSelect(fc); document.querySelectorAll(`#${containerId} .fc-pill`).forEach(p=>p.classList.remove('active')); pill.classList.add('active'); renderFn(); };
             pills.appendChild(pill);
           });
         }
 
-        buildPills('fc-pills', fc => { selectedFC = fc; renderTimeline(); });
-        buildPills('fc-pills-changes', fc => { selectedChangesFC = fc; renderChanges(); });
+        buildPills('fc-pills', fc => { selectedFC = fc; }, renderTimeline);
+        buildPills('fc-pills-changes', fc => { selectedChangesFC = fc; }, renderChanges);
 
         renderTimeline();
         renderChanges();
