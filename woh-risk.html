@@ -7,6 +7,9 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f9f8; color: #1a1a1a; padding: 24px; }
+    .dataset-tabs { display:flex; gap:8px; margin-bottom:16px; }
+    .dataset-tab { font-size:12px; padding:5px 14px; border-radius:20px; border:0.5px solid #ccc; cursor:pointer; background:#f1f0e8; color:#5f5e5a; transition:all 0.15s; }
+    .dataset-tab.active { background:#1a1a1a; color:#fff; border-color:#1a1a1a; font-weight:500; }
     .top-tabs { display:flex; gap:0; margin-bottom:14px; border-bottom:0.5px solid #ddd; }
     .top-tab { font-size:12px; padding:6px 14px; cursor:pointer; color:#888; border-bottom:2px solid transparent; margin-bottom:-0.5px; transition:all 0.15s; }
     .top-tab.active { color:#1a1a1a; border-bottom-color:#1a1a1a; font-weight:500; }
@@ -38,27 +41,58 @@
     .no-risks { font-size:13px; color:#888; padding:16px; text-align:center; }
     .section-view { display:none; }
     .section-view.active { display:block; }
+    .dataset-view { display:none; }
+    .dataset-view.active { display:block; }
   </style>
 </head>
 <body>
   <p class="status" id="status">Loading...</p>
-  <div class="top-tabs">
-    <div class="top-tab active" onclick="switchTab('all')">All</div>
-    <div class="top-tab" onclick="switchTab('oos')">Out of stock</div>
-    <div class="top-tab" onclick="switchTab('critical')">Critical</div>
-    <div class="top-tab" onclick="switchTab('atrisk')">At risk</div>
-  </div>
-  <div class="fc-pills" id="fc-pills"></div>
 
-  <div class="section-view active" id="view-all"></div>
-  <div class="section-view" id="view-oos"></div>
-  <div class="section-view" id="view-critical"></div>
-  <div class="section-view" id="view-atrisk"></div>
+  <div class="dataset-tabs">
+    <div class="dataset-tab active" onclick="switchDataset('frozen')">Frozen</div>
+    <div class="dataset-tab" onclick="switchDataset('packaging')">Packaging</div>
+  </div>
+
+  <div class="dataset-view active" id="ds-frozen">
+    <div class="top-tabs">
+      <div class="top-tab active" onclick="switchTab('frozen','all')">All</div>
+      <div class="top-tab" onclick="switchTab('frozen','oos')">Out of stock</div>
+      <div class="top-tab" onclick="switchTab('frozen','critical')">Critical</div>
+      <div class="top-tab" onclick="switchTab('frozen','atrisk')">At risk</div>
+    </div>
+    <div class="fc-pills" id="fc-pills-frozen"></div>
+    <div class="section-view active" id="frozen-all"></div>
+    <div class="section-view" id="frozen-oos"></div>
+    <div class="section-view" id="frozen-critical"></div>
+    <div class="section-view" id="frozen-atrisk"></div>
+  </div>
+
+  <div class="dataset-view" id="ds-packaging">
+    <div class="top-tabs">
+      <div class="top-tab active" onclick="switchTab('packaging','all')">All</div>
+      <div class="top-tab" onclick="switchTab('packaging','oos')">Out of stock</div>
+      <div class="top-tab" onclick="switchTab('packaging','critical')">Critical</div>
+      <div class="top-tab" onclick="switchTab('packaging','atrisk')">At risk</div>
+    </div>
+    <div class="fc-pills" id="fc-pills-packaging"></div>
+    <div class="section-view active" id="packaging-all"></div>
+    <div class="section-view" id="packaging-oos"></div>
+    <div class="section-view" id="packaging-critical"></div>
+    <div class="section-view" id="packaging-atrisk"></div>
+  </div>
 
   <script>
-    const CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS5UGXu44UBGjQp-RWXHUmU1r1EEnbVEHtwi952lTKGfWEWUdCLwgEvytyXCfWtrTtJgn0DGb5qUavg/pub?gid=118627490&single=true&output=csv';
-    const FC_ORDER = ['EWR','MEM','FTW','RNO','SMF','JAX','MKE','WC','Network'];
+    const CSVS = {
+      frozen: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS5UGXu44UBGjQp-RWXHUmU1r1EEnbVEHtwi952lTKGfWEWUdCLwgEvytyXCfWtrTtJgn0DGb5qUavg/pub?gid=1070748834&single=true&output=csv',
+      packaging: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS5UGXu44UBGjQp-RWXHUmU1r1EEnbVEHtwi952lTKGfWEWUdCLwgEvytyXCfWtrTtJgn0DGb5qUavg/pub?gid=744576819&single=true&output=csv',
+    };
+    const FC_ORDER = ['EWR','MEM','FTW','RNO','SMF','JAX','MKE','WC'];
     const RISK_FILTERS = { all: null, oos: 'Out of stock', critical: 'Critical', atrisk: 'At risk' };
+
+    let allData = { frozen: {}, packaging: {} };
+    let allWeeks = { frozen: [], packaging: [] };
+    let selectedFC = { frozen: null, packaging: null };
+    let currentDataset = 'frozen';
 
     function parseCSV(text) {
       return text.trim().split('\n').map(r => {
@@ -89,21 +123,28 @@
       return '<span class="trend-flat">→ '+e.toFixed(1)+'</span>';
     }
 
-    function switchTab(tab) {
-      document.querySelectorAll('.top-tab').forEach((t,i) => {
-        t.classList.toggle('active', ['all','oos','critical','atrisk'][i]===tab);
+    function switchDataset(ds) {
+      currentDataset = ds;
+      document.querySelectorAll('.dataset-tab').forEach((t,i) => {
+        t.classList.toggle('active', ['frozen','packaging'][i]===ds);
       });
-      document.querySelectorAll('.section-view').forEach(v => v.classList.remove('active'));
-      document.getElementById('view-'+tab).classList.add('active');
+      document.querySelectorAll('.dataset-view').forEach(v => v.classList.remove('active'));
+      document.getElementById('ds-'+ds).classList.add('active');
     }
 
-    let allData={}, allWeeks=[], selectedFC=null;
+    function switchTab(ds, tab) {
+      const container = document.getElementById('ds-'+ds);
+      container.querySelectorAll('.top-tab').forEach((t,i) => {
+        t.classList.toggle('active', ['all','oos','critical','atrisk'][i]===tab);
+      });
+      container.querySelectorAll('.section-view').forEach(v => v.classList.remove('active'));
+      document.getElementById(ds+'-'+tab).classList.add('active');
+    }
 
-    function buildWeekSection(week, rows) {
+    function buildWeekSection(ds, week, rows) {
       const oos = rows.filter(r=>r.risk==='Out of stock').length;
       const critical = rows.filter(r=>r.risk==='Critical').length;
       const atRisk = rows.filter(r=>r.risk==='At risk').length;
-
       let summaryHTML = '';
       if(oos>0) summaryHTML += '<span class="summary-pill pill-oos">'+oos+' OOS</span>';
       if(critical>0) summaryHTML += '<span class="summary-pill pill-critical">'+critical+' critical</span>';
@@ -112,7 +153,7 @@
       let html = '<div class="week-section"><div class="week-header"><div class="week-title">Week of '+week+'</div><div class="summary-pills">'+summaryHTML+'</div></div>';
 
       if(rows.length===0) {
-        html += '<div class="chart-card"><p class="no-risks">No risks'+(selectedFC?' at '+selectedFC:'')+'.</p></div></div>';
+        html += '<div class="chart-card"><p class="no-risks">No risks'+(selectedFC[ds]?' at '+selectedFC[ds]:'')+'.</p></div></div>';
         return html;
       }
 
@@ -138,52 +179,61 @@
       return html;
     }
 
-    function render() {
+    function render(ds) {
       ['all','oos','critical','atrisk'].forEach(tab => {
         const riskFilter = RISK_FILTERS[tab];
-        const el = document.getElementById('view-'+tab);
+        const el = document.getElementById(ds+'-'+tab);
         let html = '';
-        allWeeks.forEach(week => {
-          let rows = (allData[week]||[]).filter(r => !selectedFC || r.fc===selectedFC);
+        allWeeks[ds].forEach(week => {
+          let rows = (allData[ds][week]||[]).filter(r => !selectedFC[ds] || r.fc===selectedFC[ds]);
           if(riskFilter) rows = rows.filter(r => r.risk===riskFilter);
-          html += buildWeekSection(week, rows);
+          html += buildWeekSection(ds, week, rows);
         });
         el.innerHTML = html;
       });
     }
 
-    fetch(CSV)
-      .then(r=>r.text())
-      .then(text=>{
-        const rows = parseCSV(text).slice(1);
-        rows.forEach(r=>{
-          const [week,sku,fc,startWOH,endWOH,risk]=r;
-          if(!week||!sku||!fc) return;
-          if(!allData[week]){allData[week]=[];allWeeks.push(week);}
-          allData[week].push({week,sku,fc,startWOH:parseFloat(startWOH)||0,endWOH:endWOH==='—'?'—':parseFloat(endWOH),risk});
+    function loadDataset(ds, url) {
+      return fetch(url)
+        .then(r=>r.text())
+        .then(text=>{
+          const rows = parseCSV(text).slice(1);
+          rows.forEach(r=>{
+            const [week,sku,fc,startWOH,endWOH,risk]=r;
+            if(!week||!sku||!fc) return;
+            if(!allData[ds][week]){allData[ds][week]=[];allWeeks[ds].push(week);}
+            allData[ds][week].push({week,sku,fc,startWOH:parseFloat(startWOH)||0,endWOH:endWOH==='—'?'—':parseFloat(endWOH),risk});
+          });
+          allWeeks[ds]=[...new Set(allWeeks[ds])];
+
+          const pillsEl=document.getElementById('fc-pills-'+ds);
+          const allPill=document.createElement('div');
+          allPill.className='fc-pill active';
+          allPill.textContent='All FCs';
+          allPill.onclick=()=>{selectedFC[ds]=null;document.querySelectorAll('#fc-pills-'+ds+' .fc-pill').forEach(p=>p.classList.remove('active'));allPill.classList.add('active');render(ds);};
+          pillsEl.appendChild(allPill);
+
+          const fcsInData=new Set(rows.map(r=>r[2]));
+          FC_ORDER.filter(fc=>fcsInData.has(fc)).forEach(fc=>{
+            const pill=document.createElement('div');
+            pill.className='fc-pill';
+            pill.textContent=fc;
+            pill.onclick=()=>{selectedFC[ds]=fc;document.querySelectorAll('#fc-pills-'+ds+' .fc-pill').forEach(p=>p.classList.remove('active'));pill.classList.add('active');render(ds);};
+            pillsEl.appendChild(pill);
+          });
+
+          render(ds);
         });
-        allWeeks=[...new Set(allWeeks)];
-        document.getElementById('status').textContent='Live from Google Sheets · refreshes on page load';
+    }
 
-        const pillsEl=document.getElementById('fc-pills');
-        const allPill=document.createElement('div');
-        allPill.className='fc-pill active';
-        allPill.textContent='All FCs';
-        allPill.onclick=()=>{selectedFC=null;document.querySelectorAll('.fc-pill').forEach(p=>p.classList.remove('active'));allPill.classList.add('active');render();};
-        pillsEl.appendChild(allPill);
-
-        const fcsInData=new Set(rows.map(r=>r[2]));
-        FC_ORDER.filter(fc=>fcsInData.has(fc)).forEach(fc=>{
-          const pill=document.createElement('div');
-          pill.className='fc-pill';
-          pill.textContent=fc;
-          pill.onclick=()=>{selectedFC=fc;document.querySelectorAll('.fc-pill').forEach(p=>p.classList.remove('active'));pill.classList.add('active');render();};
-          pillsEl.appendChild(pill);
-        });
-
-        render();
-      })
-      .catch(err=>{document.getElementById('status').textContent='Could not load: '+err.message;});
+    Promise.all([
+      loadDataset('frozen', CSVS.frozen),
+      loadDataset('packaging', CSVS.packaging),
+    ]).then(()=>{
+      document.getElementById('status').textContent='Live from Google Sheets · refreshes on page load';
+    }).catch(err=>{
+      document.getElementById('status').textContent='Could not load: '+err.message;
+    });
   </script>
 </body>
 </html>
