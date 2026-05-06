@@ -14,10 +14,13 @@
     .fc-card { background: #fff; border: 0.5px solid rgba(0,0,0,0.1); border-radius: 12px; padding: 16px 20px; margin-bottom: 10px; }
     .fc-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 14px; font-weight: 500; color: #333; }
     .fc-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-    .week-grid { display: grid; gap: 6px; }
-    .week-label { font-size: 10px; color: #888; text-align: center; padding-bottom: 4px; border-bottom: 0.5px solid rgba(0,0,0,0.08); }
-    .metric-cell { background: #f9f9f8; border-radius: 6px; padding: 6px 4px; text-align: center; }
-    .metric-cell-value { font-size: 13px; font-weight: 500; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+    .col-label { width: 140px; }
+    th { font-size: 11px; color: #888; font-weight: 400; text-align: center; padding: 4px 6px 8px; border-bottom: 0.5px solid rgba(0,0,0,0.08); }
+    th.col-label { text-align: left; }
+    td { padding: 5px 6px; text-align: center; }
+    td.row-label { text-align: left; font-size: 11px; color: #888; white-space: nowrap; }
+    .val-cell { background: #f9f9f8; border-radius: 6px; padding: 5px 4px; font-size: 13px; font-weight: 500; display: block; }
   </style>
 </head>
 <body>
@@ -46,24 +49,39 @@
         document.getElementById('subtitle').textContent = 'Next 5 weeks · ' + weeks[0] + ' – ' + weeks[weeks.length-1];
         document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
         const content = document.getElementById('content');
+
         FC_ORDER.forEach(fc => {
           const uRow = utilRows.find(r => r[1]===fc);
           const nRow = netRows.find(r => r[1]===fc);
           const wRow = wohRows.find(r => r[1]===fc);
           if (!uRow) return;
-          const uVals = uRow.slice(2).map(v => Math.round(parseFloat(v)*10000)/100);
+
+          const uVals = uRow.slice(2).map(v => parseFloat(v) / 100);
           const nVals = nRow ? nRow.slice(2).map(v => Math.round(parseFloat(v))) : [];
           const wVals = wRow ? wRow.slice(2).map(v => parseFloat(v).toFixed(1)) : [];
+
           const card = document.createElement('div');
           card.className = 'fc-card';
           const color = FC_COLORS[fc]||'#888';
+
           let html = '<div class="fc-header"><span class="fc-dot" style="background:'+color+'"></span>'+fc+'</div>';
-          html += '<div class="week-grid" style="grid-template-columns:80px repeat('+weeks.length+',1fr);">';
-          html += '<div></div>' + weeks.map(w => '<div class="week-label">'+w.replace('/2026','')+'</div>').join('');
-          html += '<div style="font-size:10px;color:#888;display:flex;align-items:center;">util %</div>' + uVals.map(v => '<div class="metric-cell"><div class="metric-cell-value" style="color:'+utilColor(v)+'">'+v.toFixed(1)+'%</div></div>').join('');
-          html += '<div style="font-size:10px;color:#888;display:flex;align-items:center;">net plt</div>' + nVals.map(v => '<div class="metric-cell"><div class="metric-cell-value" style="color:'+netColor(v)+'">'+v.toLocaleString()+'</div></div>').join('');
-          html += '<div style="font-size:10px;color:#888;display:flex;align-items:center;">woh</div>' + wVals.map(v => '<div class="metric-cell"><div class="metric-cell-value" style="color:'+wohColor(parseFloat(v))+'">'+v+'</div></div>').join('');
-          html += '</div>';
+          html += '<table><thead><tr><th class="col-label"></th>';
+          html += weeks.map(w => '<th>'+w.replace('/2026','')+'</th>').join('');
+          html += '</tr></thead><tbody>';
+
+          html += '<tr><td class="row-label">Utilization %</td>';
+          html += uVals.map(v => '<td><span class="val-cell" style="color:'+utilColor(v)+'">'+v.toFixed(1)+'%</span></td>').join('');
+          html += '</tr>';
+
+          html += '<tr><td class="row-label">Net Avail Pallets</td>';
+          html += nVals.map(v => '<td><span class="val-cell" style="color:'+netColor(v)+'">'+v.toLocaleString()+'</span></td>').join('');
+          html += '</tr>';
+
+          html += '<tr><td class="row-label">WOH</td>';
+          html += wVals.map(v => '<td><span class="val-cell" style="color:'+wohColor(parseFloat(v))+'">'+v+'</span></td>').join('');
+          html += '</tr>';
+
+          html += '</tbody></table>';
           card.innerHTML = html;
           content.appendChild(card);
         });
