@@ -8,25 +8,26 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f9f8; color: #1a1a1a; padding: 24px; }
     .fc-pills { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; }
-    .fc-pill { font-size:11px; padding:4px 10px; border-radius:20px; border:0.5px solid #ccc; cursor:pointer; background:#f1f0e8; color:#5f5e5a; transition: all 0.15s; }
+    .fc-pill { font-size:11px; padding:4px 12px; border-radius:20px; border:0.5px solid #ccc; cursor:pointer; background:#f1f0e8; color:#5f5e5a; transition:all 0.15s; }
     .fc-pill.active { background:#1a1a1a; color:#fff; border-color:#1a1a1a; }
-    .timeline-wrap { overflow-x:auto; }
-    .month-headers { display:flex; margin-left:100px; margin-bottom:6px; }
-    .month-header { flex:1; font-size:10px; font-weight:500; color:#888; text-align:center; min-width:60px; }
-    .recipe-row { display:flex; align-items:center; margin-bottom:8px; }
-    .recipe-label { width:100px; font-size:11px; color:#888; flex-shrink:0; padding-right:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .status { font-size:11px; color:#aaa; margin-bottom:12px; }
+    .fc-section { margin-bottom:20px; background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:12px; padding:16px; overflow-x:auto; }
+    .fc-title { font-size:13px; font-weight:500; color:#333; margin-bottom:12px; }
+    .timeline { min-width:800px; }
+    .month-headers { display:flex; margin-left:110px; margin-bottom:6px; }
+    .month-header { flex:1; font-size:10px; font-weight:500; color:#888; text-align:center; }
+    .recipe-row { display:flex; align-items:center; margin-bottom:7px; }
+    .recipe-label { width:110px; font-size:11px; color:#888; flex-shrink:0; padding-right:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .months-row { display:flex; flex:1; align-items:center; }
-    .month-block-wrap { flex:1; display:flex; align-items:center; min-width:60px; }
-    .recipe-block { flex:1; height:36px; border-radius:4px; display:flex; overflow:hidden; border:0.5px solid rgba(0,0,0,0.1); }
-    .sliver { height:100%; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:500; overflow:hidden; }
-    .arrow { color:#ccc; font-size:12px; flex-shrink:0; padding:0 2px; }
-    .arrow.changed { color:#D85A30; }
-    .legend { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+    .month-block-wrap { flex:1; display:flex; align-items:center; }
+    .recipe-block { flex:1; height:34px; border-radius:4px; display:flex; overflow:hidden; border:0.5px solid rgba(0,0,0,0.08); }
+    .sliver { height:100%; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:600; overflow:hidden; letter-spacing:0.02em; }
+    .empty-block { flex:1; height:34px; border-radius:4px; background:#f5f5f3; border:0.5px dashed #ddd; }
+    .arrow { color:#ccc; font-size:11px; flex-shrink:0; padding:0 3px; }
+    .arrow.changed { color:#D85A30; font-weight:600; }
+    .legend { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
     .legend-item { display:flex; align-items:center; gap:4px; font-size:11px; color:#666; }
     .legend-dot { width:10px; height:10px; border-radius:2px; }
-    .status { font-size:11px; color:#aaa; margin-bottom:12px; }
-    .fc-section { margin-bottom:24px; background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:12px; padding:16px; }
-    .fc-title { font-size:13px; font-weight:500; color:#333; margin-bottom:12px; }
   </style>
 </head>
 <body>
@@ -49,6 +50,37 @@
     };
     const DEFAULT_COLOR = { bg:'#F1EFE8', border:'#5F5E5A', text:'#444441' };
 
+    const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    // Parse "May 2026" or "March 2026" → Date object
+    function parseMonthLabel(label) {
+      const parts = label.trim().split(' ');
+      if(parts.length !== 2) return null;
+      const monthStr = parts[0];
+      const year = parseInt(parts[1]);
+      // Try short name first
+      let idx = MONTH_NAMES.findIndex(m => monthStr.startsWith(m));
+      if(idx === -1) {
+        // Try full name
+        const fullNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        idx = fullNames.findIndex(m => m === monthStr);
+      }
+      if(idx === -1 || isNaN(year)) return null;
+      return new Date(year, idx, 1);
+    }
+
+    // Format Date → "May 2026"
+    function formatMonth(d) {
+      return MONTH_NAMES[d.getMonth()] + ' ' + d.getFullYear();
+    }
+
+    // Generate canonical 12-month list: Mar 2026 → Feb 2027
+    const MONTHS = [];
+    for(let i = 0; i < 12; i++) {
+      const d = new Date(2026, 2 + i, 1); // starts March 2026
+      MONTHS.push(formatMonth(d));
+    }
+
     function parseCSV(text) {
       return text.trim().split('\n').map(r => {
         const cols=[]; let cur='', inQ=false;
@@ -63,7 +95,7 @@
       });
     }
 
-    let allData = {}, selectedFC = null, allFCs = [], allMonths = [];
+    let allData = {}, selectedFC = null, allFCs = [];
 
     function getColor(coman) { return COMAN_COLORS[coman] || DEFAULT_COLOR; }
 
@@ -73,16 +105,18 @@
       comans.forEach(c => {
         const pct = (c.count/total*100).toFixed(1);
         const col = getColor(c.coman);
-        const showLabel = c.count/total > 0.2;
-        html += `<div class="sliver" style="width:${pct}%;background:${col.bg};border-right:0.5px solid ${col.border}40;color:${col.text};" title="${c.coman} (${c.count} SKUs)">${showLabel ? c.coman : ''}</div>`;
+        const showLabel = c.count/total >= 0.2;
+        html += `<div class="sliver" style="width:${pct}%;background:${col.bg};color:${col.text};" title="${c.coman} (${c.count} SKUs)">${showLabel ? c.coman : ''}</div>`;
       });
       html += '</div>';
       return html;
     }
 
     function blocksEqual(a, b) {
-      if(a.length !== b.length) return false;
-      return a.every((x,i) => x.coman === b[i].coman && x.count === b[i].count);
+      if(!a || !b || a.length !== b.length) return false;
+      const sa = [...a].sort((x,y)=>x.coman.localeCompare(y.coman));
+      const sb = [...b].sort((x,y)=>x.coman.localeCompare(y.coman));
+      return sa.every((x,i) => x.coman === sb[i].coman && x.count === sb[i].count);
     }
 
     function render() {
@@ -93,23 +127,23 @@
       fcsToShow.forEach(fc => {
         const section = document.createElement('div');
         section.className = 'fc-section';
-        let html = `<div class="fc-title">${fc}</div><div class="timeline-wrap"><div class="timeline">`;
-        html += '<div class="month-headers"><div style="width:100px;flex-shrink:0;"></div>';
-        allMonths.forEach(m => { html += `<div class="month-header">${m}</div>`; });
+
+        let html = `<div class="fc-title">${fc}</div><div class="timeline">`;
+        html += '<div class="month-headers"><div style="width:110px;flex-shrink:0;"></div>';
+        MONTHS.forEach(m => { html += `<div class="month-header">${m}</div>`; });
         html += '</div>';
 
         const recipes = Object.keys(allData[fc] || {}).sort();
         recipes.forEach(recipe => {
           html += `<div class="recipe-row"><div class="recipe-label" title="${recipe}">${recipe}</div><div class="months-row">`;
-          allMonths.forEach((month, mi) => {
+          MONTHS.forEach((month, mi) => {
             const comans = (allData[fc][recipe][month] || []).sort((a,b)=>b.count-a.count);
-            const prevMonth = mi > 0 ? allMonths[mi-1] : null;
-            const prevComans = prevMonth ? (allData[fc][recipe][prevMonth]||[]).sort((a,b)=>b.count-a.count) : [];
-            const changed = prevMonth && !blocksEqual(prevComans, comans);
+            const prevComans = mi > 0 ? (allData[fc][recipe][MONTHS[mi-1]] || []).sort((a,b)=>b.count-a.count) : [];
+            const changed = mi > 0 && !blocksEqual(prevComans, comans);
             html += '<div class="month-block-wrap">';
             if(mi > 0) html += `<span class="arrow${changed?' changed':''}">→</span>`;
             if(comans.length === 0) {
-              html += '<div class="recipe-block" style="background:#f5f5f3;border:0.5px dashed #ccc;"></div>';
+              html += '<div class="empty-block"></div>';
             } else {
               html += renderBlock(comans);
             }
@@ -117,8 +151,9 @@
           });
           html += '</div></div>';
         });
-        html += '</div></div>';
+        html += '</div>';
 
+        // Legend for this FC
         const seenComans = new Set();
         Object.values(allData[fc]||{}).forEach(r => Object.values(r).forEach(cs => cs.forEach(c => seenComans.add(c.coman))));
         html += '<div class="legend">';
@@ -138,8 +173,12 @@
       .then(text => {
         const rows = parseCSV(text).slice(1);
         rows.forEach(r => {
-          const [fc, recipe, month, coman, skuCount] = r;
-          if(!fc||!recipe||!month||!coman) return;
+          const [fc, recipe, rawMonth, coman, skuCount] = r;
+          if(!fc||!recipe||!rawMonth||!coman) return;
+          const d = parseMonthLabel(rawMonth);
+          if(!d) return;
+          const month = formatMonth(d); // normalize to "May 2026" format
+          if(!MONTHS.includes(month)) return; // only include our 12 months
           if(!allData[fc]) allData[fc] = {};
           if(!allData[fc][recipe]) allData[fc][recipe] = {};
           if(!allData[fc][recipe][month]) allData[fc][recipe][month] = [];
@@ -147,17 +186,6 @@
         });
 
         allFCs = Object.keys(allData).sort();
-        const monthSet = new Set();
-Object.values(allData).forEach(fc => Object.values(fc).forEach(r => Object.keys(r).forEach(m => monthSet.add(m))));
-allMonths = Array.from(monthSet)
-  .sort((a,b) => new Date('1 '+a) - new Date('1 '+b))
-  .filter(m => {
-    const d = new Date('1 ' + m);
-    const start = new Date(2026, 2, 1); // March 2026
-const end = new Date(2027, 1, 28);  // Feb 2027
-    return d >= start && d <= end;
-  });
-
         document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
 
         const pills = document.getElementById('fc-pills');
