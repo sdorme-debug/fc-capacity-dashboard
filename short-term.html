@@ -21,6 +21,7 @@
     td { padding: 5px 6px; text-align: center; }
     td.row-label { text-align: left; font-size: 11px; color: #888; white-space: nowrap; }
     .val-cell { background: #f9f9f8; border-radius: 6px; padding: 5px 4px; font-size: 13px; font-weight: 500; display: block; }
+    .na-cell { background: #f9f9f8; border-radius: 6px; padding: 5px 4px; font-size: 13px; color: #ccc; display: block; }
   </style>
 </head>
 <body>
@@ -33,11 +34,11 @@
     const ST_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRgqmVRirhaQ3AKoXv3nRKc1VK7DFlEkUQgfCLBINLi0nYD7zeapoRu7lY4pYP87MarrwiboOXjtzmf/pub?gid=811823167&single=true&output=csv';
     const FC_ORDER = ['EWR','FTW','JAX','MKE','MEM','OAK','RNO','SMF'];
     const FC_COLORS = { EWR:'#378ADD', FTW:'#7F77DD', JAX:'#BA7517', MKE:'#D85A30', MEM:'#1D9E75', OAK:'#D4537E', RNO:'#639922', SMF:'#888780' };
+    const LIMIT_3_WEEKS = ['RNO','SMF'];
 
     function parseCSV(text) {
       return text.trim().split('\n').map(row => {
-        const cols = [];
-        let cur = '', inQ = false;
+        const cols = []; let cur = '', inQ = false;
         for (let i = 0; i < row.length; i++) {
           const ch = row[i];
           if (ch === '"') { inQ = !inQ; }
@@ -51,7 +52,12 @@
 
     function utilColor(v) { return v >= 100 ? '#c0392b' : v >= 85 ? '#e67e22' : '#27ae60'; }
     function netColor(v)  { return v < 0 ? '#c0392b' : v < 150 ? '#e67e22' : '#27ae60'; }
-    function wohColor(v)  { return v < 2 ? '#c0392b' : v < 3.5 ? '#e67e22' : '#27ae60'; }
+    function wohColor(v)  {
+      if (v < 2.5) return '#c0392b';
+      if (v < 4)   return '#e67e22';
+      if (v < 7)   return '#27ae60';
+      return '#7F77DD';
+    }
 
     fetch(ST_URL)
       .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
@@ -72,6 +78,7 @@
           const wRow = wohRows.find(r => r[1]===fc);
           if (!uRow) return;
 
+          const limit = LIMIT_3_WEEKS.includes(fc) ? 3 : weeks.length;
           const uVals = uRow.slice(2).map(v => parseFloat(v));
           const nVals = nRow ? nRow.slice(2).map(v => Math.round(parseFloat(v.replace(/,/g,'')))) : [];
           const wVals = wRow ? wRow.slice(2).map(v => parseFloat(v).toFixed(1)) : [];
@@ -85,16 +92,28 @@
           html += weeks.map(w => '<th>'+w.replace('/2026','')+'</th>').join('');
           html += '</tr></thead><tbody>';
 
+          // Utilization row
           html += '<tr><td class="row-label">Utilization %</td>';
-          html += uVals.map(v => '<td><span class="val-cell" style="color:'+utilColor(v)+'">'+v.toFixed(1)+'%</span></td>').join('');
+          html += weeks.map((w, i) => i < limit
+            ? '<td><span class="val-cell" style="color:'+utilColor(uVals[i])+'">'+uVals[i].toFixed(1)+'%</span></td>'
+            : '<td><span class="na-cell">—</span></td>'
+          ).join('');
           html += '</tr>';
 
+          // Net pallets row
           html += '<tr><td class="row-label">Net Avail Pallets</td>';
-          html += nVals.map(v => '<td><span class="val-cell" style="color:'+netColor(v)+'">'+v.toLocaleString()+'</span></td>').join('');
+          html += weeks.map((w, i) => i < limit
+            ? '<td><span class="val-cell" style="color:'+netColor(nVals[i])+'">'+nVals[i].toLocaleString()+'</span></td>'
+            : '<td><span class="na-cell">—</span></td>'
+          ).join('');
           html += '</tr>';
 
+          // WOH row
           html += '<tr><td class="row-label">WOH</td>';
-          html += wVals.map(v => '<td><span class="val-cell" style="color:'+wohColor(parseFloat(v))+'">'+v+'</span></td>').join('');
+          html += weeks.map((w, i) => i < limit
+            ? '<td><span class="val-cell" style="color:'+wohColor(parseFloat(wVals[i]))+'">'+wVals[i]+'</span></td>'
+            : '<td><span class="na-cell">—</span></td>'
+          ).join('');
           html += '</tr>';
 
           html += '</tbody></table>';
