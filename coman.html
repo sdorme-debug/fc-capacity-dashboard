@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Coman Assignment Timeline</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f9f8; color: #1a1a1a; padding: 24px; }
+    .fc-pills { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; }
+    .fc-pill { font-size:11px; padding:4px 10px; border-radius:20px; border:0.5px solid #ccc; cursor:pointer; background:#f1f0e8; color:#5f5e5a; transition: all 0.15s; }
+    .fc-pill.active { background:#1a1a1a; color:#fff; border-color:#1a1a1a; }
+    .timeline-wrap { overflow-x:auto; }
+    .month-headers { display:flex; margin-left:100px; margin-bottom:6px; }
+    .month-header { flex:1; font-size:10px; font-weight:500; color:#888; text-align:center; min-width:60px; }
+    .recipe-row { display:flex; align-items:center; margin-bottom:8px; }
+    .recipe-label { width:100px; font-size:11px; color:#888; flex-shrink:0; padding-right:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .months-row { display:flex; flex:1; align-items:center; }
+    .month-block-wrap { flex:1; display:flex; align-items:center; min-width:60px; }
+    .recipe-block { flex:1; height:36px; border-radius:4px; display:flex; overflow:hidden; border:0.5px solid rgba(0,0,0,0.1); }
+    .sliver { height:100%; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:500; overflow:hidden; }
+    .arrow { color:#ccc; font-size:12px; flex-shrink:0; padding:0 2px; }
+    .arrow.changed { color:#D85A30; }
+    .legend { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+    .legend-item { display:flex; align-items:center; gap:4px; font-size:11px; color:#666; }
+    .legend-dot { width:10px; height:10px; border-radius:2px; }
+    .status { font-size:11px; color:#aaa; margin-bottom:12px; }
+    .fc-section { margin-bottom:24px; background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:12px; padding:16px; }
+    .fc-title { font-size:13px; font-weight:500; color:#333; margin-bottom:12px; }
+  </style>
+</head>
+<body>
+  <div class="fc-pills" id="fc-pills"></div>
+  <p class="status" id="status">Loading...</p>
+  <div id="content"></div>
+
+  <script>
+    const CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRgqmVRirhaQ3AKoXv3nRKc1VK7DFlEkUQgfCLBINLi0nYD7zeapoRu7lY4pYP87MarrwiboOXjtzmf/pub?gid=828115213&single=true&output=csv';
+
+    const COMAN_COLORS = {
+      'TX-S': { bg:'#E6F1FB', border:'#185FA5', text:'#0C447C' },
+      'TX-M': { bg:'#EAF3DE', border:'#3B6D11', text:'#27500A' },
+      'MN-C': { bg:'#EEEDFE', border:'#534AB7', text:'#3C3489' },
+      'IA-I': { bg:'#FAEEDA', border:'#854F0B', text:'#633806' },
+      'IN-P': { bg:'#FBEAF0', border:'#993556', text:'#72243E' },
+      'IN-S': { bg:'#FAECE7', border:'#993C1D', text:'#712B13' },
+      'CO-R': { bg:'#E1F5EE', border:'#0F6E56', text:'#085041' },
+      'MN-S': { bg:'#F1EFE8', border:'#5F5E5A', text:'#444441' },
+    };
+    const DEFAULT_COLOR = { bg:'#F1EFE8', border:'#5F5E5A', text:'#444441' };
+
+    function parseCSV(text) {
+      return text.trim().split('\n').map(r => {
+        const cols=[]; let cur='', inQ=false;
+        for(let i=0;i<r.length;i++){
+          const ch=r[i];
+          if(ch==='"'){inQ=!inQ;}
+          else if(ch===','&&!inQ){cols.push(cur.trim());cur='';}
+          else{cur+=ch;}
+        }
+        cols.push(cur.trim());
+        return cols;
+      });
+    }
+
+    let allData = {}, selectedFC = null, allFCs = [], allMonths = [];
+
+    function getColor(coman) { return COMAN_COLORS[coman] || DEFAULT_COLOR; }
+
+    function renderBlock(comans) {
+      const total = comans.reduce((s,c)=>s+c.count,0);
+      let html = '<div class="recipe-block">';
+      comans.forEach(c => {
+        const pct = (c.count/total*100).toFixed(1);
+        const col = getColor(c.coman);
+        const showLabel = c.count/total > 0.2;
+        html += `<div class="sliver" style="width:${pct}%;background:${col.bg};border-right:0.5px solid ${col.border}40;color:${col.text};" title="${c.coman} (${c.count} SKUs)">${showLabel ? c.coman : ''}</div>`;
+      });
+      html += '</div>';
+      return html;
+    }
+
+    function blocksEqual(a, b) {
+      if(a.length !== b.length) return false;
+      return a.every((x,i) => x.coman === b[i].coman && x.count === b[i].count);
+    }
+
+    function render() {
+      const content = document.getElementById('content');
+      content.innerHTML = '';
+      const fcsToShow = selectedFC ? [selectedFC] : allFCs;
+
+      fcsToShow.forEach(fc => {
+        const section = document.createElement('div');
+        section.className = 'fc-section';
+        let html = `<div class="fc-title">${fc}</div><div class="timeline-wrap"><div class="timeline">`;
+        html += '<div class="month-headers"><div style="width:100px;flex-shrink:0;"></div>';
+        allMonths.forEach(m => { html += `<div class="month-header">${m}</div>`; });
+        html += '</div>';
+
+        const recipes = Object.keys(allData[fc] || {}).sort();
+        recipes.forEach(recipe => {
+          html += `<div class="recipe-row"><div class="recipe-label" title="${recipe}">${recipe}</div><div class="months-row">`;
+          allMonths.forEach((month, mi) => {
+            const comans = (allData[fc][recipe][month] || []).sort((a,b)=>b.count-a.count);
+            const prevMonth = mi > 0 ? allMonths[mi-1] : null;
+            const prevComans = prevMonth ? (allData[fc][recipe][prevMonth]||[]).sort((a,b)=>b.count-a.count) : [];
+            const changed = prevMonth && !blocksEqual(prevComans, comans);
+            html += '<div class="month-block-wrap">';
+            if(mi > 0) html += `<span class="arrow${changed?' changed':''}">→</span>`;
+            if(comans.length === 0) {
+              html += '<div class="recipe-block" style="background:#f5f5f3;border:0.5px dashed #ccc;"></div>';
+            } else {
+              html += renderBlock(comans);
+            }
+            html += '</div>';
+          });
+          html += '</div></div>';
+        });
+        html += '</div></div>';
+
+        const seenComans = new Set();
+        Object.values(allData[fc]||{}).forEach(r => Object.values(r).forEach(cs => cs.forEach(c => seenComans.add(c.coman))));
+        html += '<div class="legend">';
+        seenComans.forEach(c => {
+          const col = getColor(c);
+          html += `<div class="legend-item"><div class="legend-dot" style="background:${col.bg};border:0.5px solid ${col.border};"></div>${c}</div>`;
+        });
+        html += '</div>';
+
+        section.innerHTML = html;
+        content.appendChild(section);
+      });
+    }
+
+    fetch(CSV)
+      .then(r => r.text())
+      .then(text => {
+        const rows = parseCSV(text).slice(1);
+        rows.forEach(r => {
+          const [fc, recipe, month, coman, skuCount] = r;
+          if(!fc||!recipe||!month||!coman) return;
+          if(!allData[fc]) allData[fc] = {};
+          if(!allData[fc][recipe]) allData[fc][recipe] = {};
+          if(!allData[fc][recipe][month]) allData[fc][recipe][month] = [];
+          allData[fc][recipe][month].push({ coman, count: parseInt(skuCount)||1 });
+        });
+
+        allFCs = Object.keys(allData).sort();
+        const monthSet = new Set();
+        Object.values(allData).forEach(fc => Object.values(fc).forEach(r => Object.keys(r).forEach(m => monthSet.add(m))));
+        allMonths = Array.from(monthSet).sort((a,b) => new Date('1 '+a) - new Date('1 '+b));
+
+        document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
+
+        const pills = document.getElementById('fc-pills');
+        const allPill = document.createElement('div');
+        allPill.className = 'fc-pill active';
+        allPill.textContent = 'All FCs';
+        allPill.onclick = () => { selectedFC = null; document.querySelectorAll('.fc-pill').forEach(p=>p.classList.remove('active')); allPill.classList.add('active'); render(); };
+        pills.appendChild(allPill);
+
+        allFCs.forEach(fc => {
+          const pill = document.createElement('div');
+          pill.className = 'fc-pill';
+          pill.textContent = fc;
+          pill.onclick = () => { selectedFC = fc; document.querySelectorAll('.fc-pill').forEach(p=>p.classList.remove('active')); pill.classList.add('active'); render(); };
+          pills.appendChild(pill);
+        });
+
+        render();
+      })
+      .catch(err => { document.getElementById('status').textContent = 'Could not load: ' + err.message; });
+  </script>
+</body>
+</html>
