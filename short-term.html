@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FC Short Term Capacity</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f9f8; color: #1a1a1a; padding: 24px; }
+    h1 { font-size: 16px; font-weight: 500; color: #444; margin-bottom: 4px; }
+    .subtitle { font-size: 12px; color: #888; margin-bottom: 20px; }
+    .status { font-size: 11px; color: #aaa; margin-top: 16px; }
+    .error { color: #c0392b; font-size: 13px; padding: 12px; background: #fdf0ee; border-radius: 8px; }
+    .fc-card { background: #fff; border: 0.5px solid rgba(0,0,0,0.1); border-radius: 12px; padding: 16px 20px; margin-bottom: 10px; }
+    .fc-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 14px; font-weight: 500; color: #333; }
+    .fc-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .week-grid { display: grid; gap: 6px; }
+    .week-label { font-size: 10px; color: #888; text-align: center; padding-bottom: 4px; border-bottom: 0.5px solid rgba(0,0,0,0.08); }
+    .metric-cell { background: #f9f9f8; border-radius: 6px; padding: 6px 4px; text-align: center; }
+    .metric-cell-value { font-size: 13px; font-weight: 500; }
+  </style>
+</head>
+<body>
+  <h1>Short term freezer capacity</h1>
+  <p class="subtitle" id="subtitle">Loading...</p>
+  <div id="content"></div>
+  <p class="status" id="status"></p>
+
+  <script>
+    const ST_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRgqmVRirhaQ3AKoXv3nRKc1VK7DFlEkUQgfCLBINLi0nYD7zeapoRu7lY4pYP87MarrwiboOXjtzmf/pub?gid=811823167&single=true&output=csv';
+    const FC_ORDER = ['EWR','FTW','JAX','MKE','MEM','OAK','RNO','SMF'];
+    const FC_COLORS = { EWR:'#378ADD', FTW:'#7F77DD', JAX:'#BA7517', MKE:'#D85A30', MEM:'#1D9E75', OAK:'#D4537E', RNO:'#639922', SMF:'#888780' };
+    function parseCSV(t) { return t.trim().split('\n').map(r => r.split(',').map(c => c.trim().replace(/^"|"$/g,''))); }
+    function utilColor(v) { return v >= 100 ? '#c0392b' : v >= 85 ? '#e67e22' : '#27ae60'; }
+    function netColor(v)  { return v < 0 ? '#c0392b' : v < 150 ? '#e67e22' : '#27ae60'; }
+    function wohColor(v)  { return v < 2 ? '#c0392b' : v < 3.5 ? '#e67e22' : '#27ae60'; }
+
+    fetch(ST_URL)
+      .then(r => { if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
+      .then(text => {
+        const rows = parseCSV(text);
+        const weeks = rows[0].slice(2);
+        const utilRows = rows.filter(r => r[0]==='util');
+        const netRows  = rows.filter(r => r[0]==='net');
+        const wohRows  = rows.filter(r => r[0]==='woh');
+        document.getElementById('subtitle').textContent = 'Next 5 weeks · ' + weeks[0] + ' – ' + weeks[weeks.length-1];
+        document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
+        const content = document.getElementById('content');
+        FC_ORDER.forEach(fc => {
+          const uRow = utilRows.find(r => r[1]===fc);
+          const nRow = netRows.find(r => r[1]===fc);
+          const wRow = wohRows.find(r => r[1]===fc);
+          if (!uRow) return;
+          const uVals = uRow.slice(2).map(v => Math.round(parseFloat(v)*10000)/100);
+          const nVals = nRow ? nRow.slice(2).map(v => Math.round(parseFloat(v))) : [];
+          const wVals = wRow ? wRow.slice(2).map(v => parseFloat(v).toFixed(1)) : [];
+          const card = document.createElement('div');
+          card.className = 'fc-card';
+          const color = FC_COLORS[fc]||'#888';
+          let html = '<div class="fc-header"><span class="fc-dot" style="background:'+color+'"></span>'+fc+'</div>';
+          html += '<div class="week-grid" style="grid-template-columns:80px repeat('+weeks.length+',1fr);">';
+          html += '<div></div>' + weeks.map(w => '<div class="week-label">'+w.replace('/2026','')+'</div>').join('');
+          html += '<div style="font-size:10px;color:#888;display:flex;align-items:center;">util %</div>' + uVals.map(v => '<div class="metric-cell"><div class="metric-cell-value" style="color:'+utilColor(v)+'">'+v.toFixed(1)+'%</div></div>').join('');
+          html += '<div style="font-size:10px;color:#888;display:flex;align-items:center;">net plt</div>' + nVals.map(v => '<div class="metric-cell"><div class="metric-cell-value" style="color:'+netColor(v)+'">'+v.toLocaleString()+'</div></div>').join('');
+          html += '<div style="font-size:10px;color:#888;display:flex;align-items:center;">woh</div>' + wVals.map(v => '<div class="metric-cell"><div class="metric-cell-value" style="color:'+wohColor(parseFloat(v))+'">'+v+'</div></div>').join('');
+          html += '</div>';
+          card.innerHTML = html;
+          content.appendChild(card);
+        });
+      })
+      .catch(err => { document.getElementById('content').innerHTML = '<div class="error">Could not load data: '+err.message+'</div>'; });
+  </script>
+</body>
+</html>
