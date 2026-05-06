@@ -148,8 +148,15 @@
 
         allFCs = Object.keys(allData).sort();
         const monthSet = new Set();
-        Object.values(allData).forEach(fc => Object.values(fc).forEach(r => Object.keys(r).forEach(m => monthSet.add(m))));
-        allMonths = Array.from(monthSet).sort((a,b) => new Date('1 '+a) - new Date('1 '+b));
+Object.values(allData).forEach(fc => Object.values(fc).forEach(r => Object.keys(r).forEach(m => monthSet.add(m))));
+allMonths = Array.from(monthSet)
+  .sort((a,b) => new Date('1 '+a) - new Date('1 '+b))
+  .filter(m => {
+    const d = new Date('1 ' + m);
+    const start = new Date(2026, 2, 1); // March 2026
+    const end = new Date(2027, 1, 28); // Feb 2027
+    return d >= start && d <= end;
+  });
 
         document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
 
