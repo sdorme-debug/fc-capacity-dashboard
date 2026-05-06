@@ -7,42 +7,58 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f9f8; color: #1a1a1a; padding: 24px; }
-    .fc-pills { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; }
-    .fc-pill { font-size:11px; padding:4px 12px; border-radius:20px; border:0.5px solid #ccc; cursor:pointer; background:#f1f0e8; color:#5f5e5a; transition:all 0.15s; }
+    .top-tabs { display:flex; gap:0; margin-bottom:14px; border-bottom:0.5px solid #ddd; }
+    .top-tab { font-size:12px; padding:6px 14px; cursor:pointer; color:#888; border-bottom:2px solid transparent; margin-bottom:-0.5px; transition:all 0.15s; }
+    .top-tab.active { color:#1a1a1a; border-bottom-color:#1a1a1a; font-weight:500; }
+    .fc-pills { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:14px; }
+    .fc-pill { font-size:11px; padding:3px 10px; border-radius:20px; border:0.5px solid #ccc; cursor:pointer; background:#f1f0e8; color:#5f5e5a; transition:all 0.15s; }
     .fc-pill.active { background:#1a1a1a; color:#fff; border-color:#1a1a1a; }
-    .week-section { margin-bottom:20px; }
-    .week-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+    .week-section { margin-bottom:16px; }
+    .week-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
     .week-title { font-size:13px; font-weight:500; color:#333; }
     .summary-pills { display:flex; gap:6px; }
-    .summary-pill { font-size:11px; padding:2px 10px; border-radius:20px; }
+    .summary-pill { font-size:11px; padding:2px 8px; border-radius:20px; }
     .pill-oos { background:#FCEBEB; color:#791F1F; }
     .pill-critical { background:#F7C1C1; color:#A32D2D; }
     .pill-atrisk { background:#FAEEDA; color:#633806; }
-    .chart-card { background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:12px; padding:20px; overflow-x:auto; }
+    .chart-card { background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:12px; padding:16px; overflow-x:auto; }
     table { border-collapse:collapse; font-size:11px; width:100%; }
-    th { padding:6px 10px; color:#888; font-weight:500; text-align:left; border-bottom:0.5px solid rgba(0,0,0,0.1); white-space:nowrap; }
-    td { padding:6px 10px; border-bottom:0.5px solid rgba(0,0,0,0.04); font-size:12px; }
+    th { padding:4px 10px; color:#888; font-weight:500; text-align:left; border-bottom:0.5px solid rgba(0,0,0,0.1); white-space:nowrap; }
+    td { padding:3px 10px; border-bottom:0.5px solid rgba(0,0,0,0.04); font-size:11px; }
     tr:last-child td { border-bottom:none; }
     .fc-divider td { border-top:1px solid rgba(0,0,0,0.08); }
-    .risk-oos { background:#FCEBEB; color:#791F1F; border-radius:4px; padding:2px 8px; font-size:11px; font-weight:500; display:inline-block; }
-    .risk-critical { background:#F7C1C1; color:#A32D2D; border-radius:4px; padding:2px 8px; font-size:11px; font-weight:500; display:inline-block; }
-    .risk-atrisk { background:#FAEEDA; color:#633806; border-radius:4px; padding:2px 8px; font-size:11px; font-weight:500; display:inline-block; }
+    .risk-oos { background:#FCEBEB; color:#791F1F; border-radius:4px; padding:1px 7px; font-size:11px; font-weight:500; display:inline-block; }
+    .risk-critical { background:#F7C1C1; color:#A32D2D; border-radius:4px; padding:1px 7px; font-size:11px; font-weight:500; display:inline-block; }
+    .risk-atrisk { background:#FAEEDA; color:#633806; border-radius:4px; padding:1px 7px; font-size:11px; font-weight:500; display:inline-block; }
     .woh-val { font-weight:500; }
     .trend-up { color:#27ae60; font-size:11px; }
     .trend-down { color:#c0392b; font-size:11px; }
     .trend-flat { color:#888; font-size:11px; }
     .status { font-size:11px; color:#aaa; margin-bottom:12px; }
-    .no-risks { font-size:13px; color:#888; padding:20px; text-align:center; }
+    .no-risks { font-size:13px; color:#888; padding:16px; text-align:center; }
+    .section-view { display:none; }
+    .section-view.active { display:block; }
   </style>
 </head>
 <body>
   <p class="status" id="status">Loading...</p>
+  <div class="top-tabs">
+    <div class="top-tab active" onclick="switchTab('all')">All</div>
+    <div class="top-tab" onclick="switchTab('oos')">Out of stock</div>
+    <div class="top-tab" onclick="switchTab('critical')">Critical</div>
+    <div class="top-tab" onclick="switchTab('atrisk')">At risk</div>
+  </div>
   <div class="fc-pills" id="fc-pills"></div>
-  <div id="content"></div>
+
+  <div class="section-view active" id="view-all"></div>
+  <div class="section-view" id="view-oos"></div>
+  <div class="section-view" id="view-critical"></div>
+  <div class="section-view" id="view-atrisk"></div>
 
   <script>
     const CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS5UGXu44UBGjQp-RWXHUmU1r1EEnbVEHtwi952lTKGfWEWUdCLwgEvytyXCfWtrTtJgn0DGb5qUavg/pub?gid=118627490&single=true&output=csv';
     const FC_ORDER = ['EWR','MEM','FTW','RNO','SMF','JAX','MKE','WC','Network'];
+    const RISK_FILTERS = { all: null, oos: 'Out of stock', critical: 'Critical', atrisk: 'At risk' };
 
     function parseCSV(text) {
       return text.trim().split('\n').map(r => {
@@ -73,57 +89,66 @@
       return '<span class="trend-flat">→ '+e.toFixed(1)+'</span>';
     }
 
+    function switchTab(tab) {
+      document.querySelectorAll('.top-tab').forEach((t,i) => {
+        t.classList.toggle('active', ['all','oos','critical','atrisk'][i]===tab);
+      });
+      document.querySelectorAll('.section-view').forEach(v => v.classList.remove('active'));
+      document.getElementById('view-'+tab).classList.add('active');
+    }
+
     let allData={}, allWeeks=[], selectedFC=null;
 
-    function render() {
-      const content = document.getElementById('content');
-      content.innerHTML = '';
+    function buildWeekSection(week, rows) {
+      const oos = rows.filter(r=>r.risk==='Out of stock').length;
+      const critical = rows.filter(r=>r.risk==='Critical').length;
+      const atRisk = rows.filter(r=>r.risk==='At risk').length;
 
-      allWeeks.forEach(week => {
-        const rows = (allData[week]||[]).filter(r => !selectedFC || r.fc===selectedFC);
+      let summaryHTML = '';
+      if(oos>0) summaryHTML += '<span class="summary-pill pill-oos">'+oos+' OOS</span>';
+      if(critical>0) summaryHTML += '<span class="summary-pill pill-critical">'+critical+' critical</span>';
+      if(atRisk>0) summaryHTML += '<span class="summary-pill pill-atrisk">'+atRisk+' at risk</span>';
 
-        const section = document.createElement('div');
-        section.className = 'week-section';
+      let html = '<div class="week-section"><div class="week-header"><div class="week-title">Week of '+week+'</div><div class="summary-pills">'+summaryHTML+'</div></div>';
 
-        const oos = rows.filter(r=>r.risk==='Out of stock').length;
-        const critical = rows.filter(r=>r.risk==='Critical').length;
-        const atRisk = rows.filter(r=>r.risk==='At risk').length;
+      if(rows.length===0) {
+        html += '<div class="chart-card"><p class="no-risks">No risks'+(selectedFC?' at '+selectedFC:'')+'.</p></div></div>';
+        return html;
+      }
 
-        let summaryHTML = '';
-        if(oos>0) summaryHTML += '<span class="summary-pill pill-oos">'+oos+' OOS</span>';
-        if(critical>0) summaryHTML += '<span class="summary-pill pill-critical">'+critical+' critical</span>';
-        if(atRisk>0) summaryHTML += '<span class="summary-pill pill-atrisk">'+atRisk+' at risk</span>';
+      const byFC = {};
+      rows.forEach(r => { if(!byFC[r.fc]) byFC[r.fc]=[]; byFC[r.fc].push(r); });
 
-        let html = '<div class="week-header"><div class="week-title">Week of '+week+'</div><div class="summary-pills">'+summaryHTML+'</div></div>';
+      html += '<div class="chart-card"><table><thead><tr><th style="width:70px;">FC</th><th>SKU</th><th style="width:100px;">Starting WOH</th><th style="width:100px;">Ending WOH</th><th style="width:95px;">Risk</th></tr></thead><tbody>';
 
-        if(rows.length===0) {
-          html += '<div class="chart-card"><p class="no-risks">No risks'+(selectedFC?' at '+selectedFC:'')+'.</p></div>';
-          section.innerHTML = html;
-          content.appendChild(section);
-          return;
-        }
-
-        const byFC = {};
-        rows.forEach(r => { if(!byFC[r.fc]) byFC[r.fc]=[]; byFC[r.fc].push(r); });
-
-        html += '<div class="chart-card"><table><thead><tr><th style="width:80px;">FC</th><th>SKU</th><th style="width:110px;">Starting WOH</th><th style="width:110px;">Ending WOH</th><th style="width:100px;">Risk</th></tr></thead><tbody>';
-
-        FC_ORDER.forEach(fc => {
-          if(!byFC[fc]) return;
-          byFC[fc].sort((a,b)=>a.startWOH-b.startWOH).forEach((r,i) => {
-            html += '<tr'+(i===0?' class="fc-divider"':'')+'>'; 
-            html += '<td style="font-weight:500;">'+(i===0?fc:'')+'</td>';
-            html += '<td>'+r.sku+'</td>';
-            html += '<td><span class="woh-val">'+r.startWOH.toFixed(1)+'</span></td>';
-            html += '<td>'+trendArrow(r.startWOH, r.endWOH)+'</td>';
-            html += '<td>'+riskBadge(r.risk)+'</td>';
-            html += '</tr>';
-          });
+      FC_ORDER.forEach(fc => {
+        if(!byFC[fc]) return;
+        byFC[fc].sort((a,b)=>a.startWOH-b.startWOH).forEach((r,i) => {
+          html += '<tr'+(i===0?' class="fc-divider"':'')+'>'; 
+          html += '<td style="font-weight:500;">'+(i===0?fc:'')+'</td>';
+          html += '<td>'+r.sku+'</td>';
+          html += '<td><span class="woh-val">'+r.startWOH.toFixed(1)+'</span></td>';
+          html += '<td>'+trendArrow(r.startWOH, r.endWOH)+'</td>';
+          html += '<td>'+riskBadge(r.risk)+'</td>';
+          html += '</tr>';
         });
+      });
 
-        html += '</tbody></table></div>';
-        section.innerHTML = html;
-        content.appendChild(section);
+      html += '</tbody></table></div></div>';
+      return html;
+    }
+
+    function render() {
+      ['all','oos','critical','atrisk'].forEach(tab => {
+        const riskFilter = RISK_FILTERS[tab];
+        const el = document.getElementById('view-'+tab);
+        let html = '';
+        allWeeks.forEach(week => {
+          let rows = (allData[week]||[]).filter(r => !selectedFC || r.fc===selectedFC);
+          if(riskFilter) rows = rows.filter(r => r.risk===riskFilter);
+          html += buildWeekSection(week, rows);
+        });
+        el.innerHTML = html;
       });
     }
 
