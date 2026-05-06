@@ -154,7 +154,7 @@ allMonths = Array.from(monthSet)
   .filter(m => {
     const d = new Date('1 ' + m);
     const start = new Date(2026, 2, 1); // March 2026
-    const end = new Date(2027, 1, 28); // Feb 2027
+const end = new Date(2027, 1, 28);  // Feb 2027
     return d >= start && d <= end;
   });
 
