@@ -72,7 +72,7 @@
           const wRow = wohRows.find(r => r[1]===fc);
           if (!uRow) return;
 
-          const uVals = uRow.slice(2).map(v => Math.round(parseFloat(v) * 10000) / 100);
+          const uVals = uRow.slice(2).map(v => parseFloat(v));
           const nVals = nRow ? nRow.slice(2).map(v => Math.round(parseFloat(v.replace(/,/g,'')))) : [];
           const wVals = wRow ? wRow.slice(2).map(v => parseFloat(v).toFixed(1)) : [];
 
