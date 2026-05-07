@@ -48,16 +48,16 @@
     }
 
     function wohClass(v) {
-      if(v<=0) return 'c-oos'; if(v<1) return 'c-critical';
-      if(v<2) return 'c-atrisk'; if(v<4) return 'c-ok';
-      return 'c-good';
-    }
+  if(v<=0) return 'c-oos'; if(v<1) return 'c-critical';
+  if(v<2) return 'c-atrisk'; if(v<4) return 'c-ok';
+  if(v<8) return 'c-good'; return 'c-great';
+}
 
-    function dotColor(v) {
-      if(v<=0) return '#791F1F'; if(v<1) return '#A32D2D';
-      if(v<2) return '#BA7517'; if(v<4) return '#27ae60';
-      return '#1D9E75';
-    }
+function dotColor(v) {
+  if(v<=0) return '#791F1F'; if(v<1) return '#A32D2D';
+  if(v<2) return '#BA7517'; if(v<4) return '#27ae60';
+  if(v<8) return '#1D9E75'; return '#7F77DD';
+}
 
     function buildRows(skus, catLabel) {
       let html = '';
