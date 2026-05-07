@@ -17,7 +17,7 @@
     table { border-collapse:collapse; font-size:11px; width:100%; table-layout:fixed; }
     th { padding:6px 10px; color:#888; font-weight:500; text-align:center; border-bottom:0.5px solid rgba(0,0,0,0.1); white-space:nowrap; font-size:11px; }
     th.left { text-align:left; width:140px; }
-    td { padding:4px 10px; text-align:center; border-bottom:0.5px solid rgba(0,0,0,0.04); }
+    td { padding:4px 10px; text-align:center; border-bottom:0.5px solid rgba(0,0,0,0.04); font-size:11px; }
     td.fc-cell { font-weight:500; font-size:11px; color:#444; text-align:left; }
     td.day-cell { color:#888; font-size:11px; text-align:left; }
     td.appts-cell { color:#aaa; font-size:11px; }
@@ -34,13 +34,13 @@
 </head>
 <body>
   <div class="top-tabs">
-    <div class="top-tab active" onclick="switchTab('all')">Planned</div>
-    <div class="top-tab" onclick="switchTab('overages')">Overages only</div>
+    <div class="top-tab" onclick="switchTab('all')">Planned</div>
+    <div class="top-tab active" onclick="switchTab('overages')">Overages only</div>
   </div>
   <p class="status" id="status">Loading...</p>
   <p class="month-note" id="month-note"></p>
 
-  <div class="section-view active" id="view-all">
+  <div class="section-view" id="view-all">
     <div class="legend">
       <div class="legend-item"><span class="legend-dot" style="background:#eaf3de;border:0.5px solid #639922;"></span>Within capacity</div>
       <div class="legend-item"><span class="legend-dot" style="background:#fcebeb;border:0.5px solid #a32d2d;"></span>Over capacity (peak week)</div>
@@ -48,7 +48,7 @@
     <div class="chart-card" id="planned-all"></div>
   </div>
 
-  <div class="section-view" id="view-overages">
+  <div class="section-view active" id="view-overages">
     <div class="chart-card" id="planned-overages"></div>
   </div>
 
@@ -96,34 +96,31 @@
     }
 
     fetch(CSV_URL)
-      .then(r => r.text())
-      .then(text => {
+      .then(r=>r.text())
+      .then(text=>{
         const rows = parseCSV(text);
         const headers = rows[0];
 
-        // Get all Planned columns with parsed dates
         const plannedCols = headers.map((h,i) => {
           if(!h.startsWith('Planned_')) return null;
           const d = parseDate(h.replace('Planned_',''));
           return d ? {idx:i, date:d} : null;
         }).filter(Boolean);
 
-        // Group planned columns by month
         const monthMap = {};
         plannedCols.forEach(c => {
           const key = monthKey(c.date);
-          if(!monthMap[key]) monthMap[key] = { label: monthLabel(c.date), cols: [] };
+          if(!monthMap[key] || c.date > monthMap[key].date) {
+            monthMap[key] = { label: monthLabel(c.date), cols: [] };
+          }
+        });
+        plannedCols.forEach(c => {
+          const key = monthKey(c.date);
           monthMap[key].cols.push(c);
         });
 
-        // Sort months chronologically
-        const months = Object.keys(monthMap).sort((a,b) => {
-  const [ay, am] = a.split('-').map(Number);
-  const [by, bm] = b.split('-').map(Number);
-  return ay !== by ? ay - by : am - bm;
-}).map(k => monthMap[k]);
+        const months = Object.keys(monthMap).sort().map(k => monthMap[k]);
 
-        // Build lookup: FC_day -> { appts, vals }
         const lookup = {};
         rows.slice(1).forEach(r => {
           const key = r[0]+'_'+r[1];
@@ -145,7 +142,6 @@
               const row = lookup[fc+'_'+day];
               if(!row || row.appts === 0) return;
 
-              // Get peak week value per month
               const peakVals = months.map(m => {
                 const weekVals = m.cols.map(c => parseFloat(row.vals[c.idx].toString().replace(/[,%]/g,''))||0);
                 return Math.max(...weekVals, 0);
