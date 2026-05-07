@@ -9,29 +9,78 @@
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f9f8; color: #1a1a1a; padding: 24px; }
     h1 { font-size: 16px; font-weight: 500; color: #444; margin-bottom: 4px; }
     .subtitle { font-size: 12px; color: #888; margin-bottom: 20px; }
-    .fc-pills { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:16px; }
-    .fc-pill { font-size:11px; padding:4px 12px; border-radius:20px; border:0.5px solid #ccc; cursor:pointer; background:#f1f0e8; color:#5f5e5a; transition:all 0.15s; }
-    .fc-pill.active { background:#1a1a1a; color:#fff; border-color:#1a1a1a; }
-    .status { font-size:11px; color:#aaa; margin-bottom:12px; }
-    .fc-card { background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:12px; padding:16px 20px; margin-bottom:10px; }
-    .fc-header { display:flex; align-items:center; gap:8px; margin-bottom:12px; font-size:14px; font-weight:500; color:#333; }
-    .fc-dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
-    table { width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed; }
-    th { font-size:11px; color:#888; font-weight:400; text-align:center; padding:4px 6px 8px; border-bottom:0.5px solid rgba(0,0,0,0.08); }
-    th.left { text-align:left; width:170px; }
-    td { padding:5px 6px; text-align:center; }
-    td.row-label { text-align:left; font-size:11px; color:#888; white-space:nowrap; }
-    td.row-label .sublabel { font-size:10px; color:#bbb; margin-left:4px; }
-    .val-cell { background:#f9f9f8; border-radius:6px; padding:5px 4px; font-size:13px; font-weight:500; display:block; }
-    .divider-row td { border-top:0.5px solid rgba(0,0,0,0.06); padding-top:8px; }
+    .status { font-size: 11px; color: #aaa; margin-bottom: 12px; }
+ 
+    /* Tab nav */
+    .tab-nav { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 1px solid rgba(0,0,0,0.1); }
+    .tab-btn { font-size: 12px; padding: 8px 18px; cursor: pointer; border: none; background: none; color: #888; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s; }
+    .tab-btn.active { color: #1a1a1a; border-bottom-color: #1a1a1a; font-weight: 500; }
+    .tab-btn:hover:not(.active) { color: #555; }
+ 
+    /* FC pills (detail tab) */
+    .fc-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+    .fc-pill { font-size: 11px; padding: 4px 12px; border-radius: 20px; border: 0.5px solid #ccc; cursor: pointer; background: #f1f0e8; color: #5f5e5a; transition: all 0.15s; }
+    .fc-pill.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+ 
+    /* Summary table */
+    .summary-card { background: #fff; border: 0.5px solid rgba(0,0,0,0.1); border-radius: 12px; padding: 20px 24px; }
+    .summary-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .summary-table th { font-size: 12px; font-weight: 600; color: #333; text-align: left; padding: 0 16px 14px 0; border-bottom: 1px solid rgba(0,0,0,0.1); }
+    .summary-table th.week-col { text-align: center; min-width: 80px; }
+    .summary-table td { padding: 12px 16px 12px 0; border-bottom: 0.5px solid rgba(0,0,0,0.06); color: #444; font-size: 13px; vertical-align: middle; }
+    .summary-table td.fc-name { font-weight: 500; color: #222; white-space: nowrap; min-width: 160px; }
+    .summary-table td.fc-name .fc-dot-sm { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 8px; vertical-align: middle; }
+    .summary-table td.util-val { text-align: center; font-weight: 500; font-size: 13px; }
+    .summary-table tr:last-child td { border-bottom: none; }
+ 
+    /* Detail cards */
+    .fc-card { background: #fff; border: 0.5px solid rgba(0,0,0,0.1); border-radius: 12px; padding: 16px 20px; margin-bottom: 10px; }
+    .fc-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 14px; font-weight: 500; color: #333; }
+    .fc-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+    th { font-size: 11px; color: #888; font-weight: 400; text-align: center; padding: 4px 6px 8px; border-bottom: 0.5px solid rgba(0,0,0,0.08); }
+    th.left { text-align: left; width: 170px; }
+    td { padding: 5px 6px; text-align: center; }
+    td.row-label { text-align: left; font-size: 11px; color: #888; white-space: nowrap; }
+    td.row-label .sublabel { font-size: 10px; color: #bbb; margin-left: 4px; }
+    .val-cell { background: #f9f9f8; border-radius: 6px; padding: 5px 4px; font-size: 13px; font-weight: 500; display: block; }
+    .divider-row td { border-top: 0.5px solid rgba(0,0,0,0.06); padding-top: 8px; }
   </style>
 </head>
 <body>
-  <h1>Short term freezer capacity</h1>
+  <h1>Short term dry capacity</h1>
   <p class="subtitle" id="subtitle">Loading...</p>
   <p class="status" id="status"></p>
-  <div class="fc-pills" id="fc-pills"></div>
-  <div id="content"></div>
+ 
+  <div class="tab-nav">
+    <button class="tab-btn active" id="tab-summary" onclick="switchTab('summary')">Summary</button>
+    <button class="tab-btn" id="tab-detail" onclick="switchTab('detail')">Detail</button>
+  </div>
+ 
+  <!-- Summary view -->
+  <div id="view-summary">
+    <div class="summary-card">
+      <table class="summary-table">
+        <thead>
+          <tr>
+            <th>FC</th>
+            <th class="week-col" id="sh0"></th>
+            <th class="week-col" id="sh1"></th>
+            <th class="week-col" id="sh2"></th>
+            <th class="week-col" id="sh3"></th>
+            <th class="week-col" id="sh4"></th>
+          </tr>
+        </thead>
+        <tbody id="summary-body"></tbody>
+      </table>
+    </div>
+  </div>
+ 
+  <!-- Detail view -->
+  <div id="view-detail" style="display:none;">
+    <div class="fc-pills" id="fc-pills"></div>
+    <div id="content"></div>
+  </div>
  
   <script>
     const CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS1nWgrsa3Ek5z-kZlahiqpWT6soZ_8QkpdAH_QCCgeNTATh6oNYHi5BPTMnjZFAyDQH1C9Nv68F4Y_/pub?gid=2001304532&single=true&output=csv';
@@ -43,10 +92,8 @@
     };
  
     function parseCSV(text) {
-      // Auto-detect delimiter: tab or comma
       const firstLine = text.split('\n')[0];
       const delim = firstLine.includes('\t') ? '\t' : ',';
- 
       return text.trim().split('\n').map(r => {
         if (delim === '\t') return r.split('\t').map(c => c.trim());
         const cols = []; let cur = '', inQ = false;
@@ -67,6 +114,53 @@
  
     let allData = {}, weeks = [], selectedFC = null;
  
+    function switchTab(tab) {
+      document.getElementById('view-summary').style.display = tab === 'summary' ? '' : 'none';
+      document.getElementById('view-detail').style.display = tab === 'detail' ? '' : 'none';
+      document.getElementById('tab-summary').classList.toggle('active', tab === 'summary');
+      document.getElementById('tab-detail').classList.toggle('active', tab === 'detail');
+    }
+ 
+    function shortWeek(w) {
+      return w.replace(/\/\d{2,4}$/, '');
+    }
+ 
+    function renderSummary() {
+      weeks.forEach((w, i) => {
+        const el = document.getElementById('sh' + i);
+        if (el) el.textContent = shortWeek(w);
+      });
+ 
+      const tbody = document.getElementById('summary-body');
+      tbody.innerHTML = '';
+ 
+      // EWR w/ offsite first
+      const ewrOffsite = allData['EWR (FC+offsite)'];
+      if (ewrOffsite && ewrOffsite.util) {
+        const tr = document.createElement('tr');
+        let html = '<td class="fc-name"><span class="fc-dot-sm" style="background:' + FC_COLORS['EWR'] + '"></span>EWR (w/ offsite)</td>';
+        ewrOffsite.util.forEach(v => {
+          const n = Math.round(parseFloat(v) * 100);
+          html += '<td class="util-val" style="color:' + utilColor(n) + ';">' + n + '%</td>';
+        });
+        tr.innerHTML = html;
+        tbody.appendChild(tr);
+      }
+ 
+      FC_ORDER.forEach(fc => {
+        const d = allData[fc];
+        if (!d || !d.util) return;
+        const tr = document.createElement('tr');
+        let html = '<td class="fc-name"><span class="fc-dot-sm" style="background:' + (FC_COLORS[fc] || '#888') + '"></span>' + fc + '</td>';
+        d.util.forEach(v => {
+          const n = Math.round(parseFloat(v) * 100);
+          html += '<td class="util-val" style="color:' + utilColor(n) + ';">' + n + '%</td>';
+        });
+        tr.innerHTML = html;
+        tbody.appendChild(tr);
+      });
+    }
+ 
     function renderRows(type, values, labelText, sublabel) {
       if (!values || !values.length) return '';
       let html = '<tr><td class="row-label">' + labelText + (sublabel ? '<span class="sublabel">' + sublabel + '</span>' : '') + '</td>';
@@ -74,20 +168,16 @@
         let display, color;
         if (type === 'util') {
           const n = Math.round(parseFloat(v) * 100);
-          display = n + '%';
-          color = utilColor(n);
+          display = n + '%'; color = utilColor(n);
         } else if (type === 'remaining') {
           const n = Math.round(parseFloat(v) || 0);
-          display = n.toLocaleString();
-          color = remainingColor(n);
+          display = n.toLocaleString(); color = remainingColor(n);
         } else if (type === 'oh') {
           const n = Math.round(parseFloat(v) || 0);
-          display = n.toLocaleString();
-          color = ohColor(n);
+          display = n.toLocaleString(); color = ohColor(n);
         } else {
           const n = Math.round(parseFloat(v) || 0);
-          display = n.toLocaleString();
-          color = '#555';
+          display = n.toLocaleString(); color = '#555';
         }
         html += '<td><span class="val-cell" style="color:' + color + ';">' + display + '</span></td>';
       });
@@ -95,7 +185,7 @@
       return html;
     }
  
-    function render() {
+    function renderDetail() {
       const content = document.getElementById('content');
       content.innerHTML = '';
       const fcsToShow = selectedFC ? [selectedFC] : FC_ORDER;
@@ -111,11 +201,10 @@
  
         let html = '<div class="fc-header"><span class="fc-dot" style="background:' + color + '"></span>' + fc + '</div>';
         html += '<table><thead><tr><th class="left"></th>';
-        weeks.forEach(w => { html += '<th>' + w + '</th>'; });
+        weeks.forEach(w => { html += '<th>' + shortWeek(w) + '</th>'; });
         html += '</tr></thead><tbody>';
  
         if (dOffsite) {
-          // FC with offsite (e.g. EWR) — show w/ offsite rows first, then FC-only with divider
           html += renderRows('util', dOffsite.util, 'Utilization %', 'w/ offsite');
           html += renderRows('remaining', dOffsite.remaining, 'Net Avail Pallets', 'w/ offsite');
           html += '<tr class="divider-row">';
@@ -148,7 +237,7 @@
           allData[fc][type] = r.slice(2);
         });
  
-        document.getElementById('subtitle').textContent = 'Next 5 weeks · ' + weeks[0] + ' – ' + weeks[weeks.length - 1];
+        document.getElementById('subtitle').textContent = 'Next 5 weeks · ' + shortWeek(weeks[0]) + ' – ' + shortWeek(weeks[weeks.length - 1]);
         document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
  
         const pillsEl = document.getElementById('fc-pills');
@@ -159,7 +248,7 @@
           selectedFC = null;
           document.querySelectorAll('.fc-pill').forEach(p => p.classList.remove('active'));
           allPill.classList.add('active');
-          render();
+          renderDetail();
         };
         pillsEl.appendChild(allPill);
  
@@ -171,12 +260,13 @@
             selectedFC = fc;
             document.querySelectorAll('.fc-pill').forEach(p => p.classList.remove('active'));
             pill.classList.add('active');
-            render();
+            renderDetail();
           };
           pillsEl.appendChild(pill);
         });
  
-        render();
+        renderSummary();
+        renderDetail();
       })
       .catch(err => {
         document.getElementById('subtitle').textContent = 'Could not load: ' + err.message;
