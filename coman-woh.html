@@ -91,7 +91,7 @@
     }
 
     function parseMonthLabel(m) {
-      const parts = m.split(' ');
+      const parts = m.trim().split(' ');
       return new Date(parseInt(parts[1]), MONTH_NAMES.indexOf(parts[0]), 1);
     }
 
@@ -118,12 +118,14 @@
       });
 
       const today = new Date();
+      const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
       const cutoff = new Date(today.getFullYear(), today.getMonth()+6, 1);
       const monthOrder = allMonths.filter(m => {
         const d = parseMonthLabel(m);
-        return d >= new Date(today.getFullYear(), today.getMonth(), 1) && d < cutoff;
+        return d >= startOfMonth && d < cutoff;
       });
 
+      // Remove all-zero combos based on filtered months
       Object.keys(data).forEach(coman => {
         Object.keys(data[coman]).forEach(recipe => {
           const allZero = monthOrder.every(m => {
@@ -134,16 +136,21 @@
         });
       });
 
-      document.getElementById('subtitle').textContent = monthOrder[0] + ' – ' + monthOrder[monthOrder.length-1];
-      document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
-
-      // Sort recipes by number of active comans descending
+      // Build recipeList AFTER cleanup so sort has accurate coman counts
       const recipeList = [...recipes].sort((a,b) => {
         const aComans = COMAN_ORDER.filter(c=>data[c]&&data[c][a]).length;
         const bComans = COMAN_ORDER.filter(c=>data[c]&&data[c][b]).length;
         if(bComans!==aComans) return bComans-aComans;
         return a.localeCompare(b);
       });
+
+      if(monthOrder.length === 0) {
+        document.getElementById('subtitle').textContent = 'No data available for next 6 months';
+        return;
+      }
+
+      document.getElementById('subtitle').textContent = monthOrder[0] + ' – ' + monthOrder[monthOrder.length-1];
+      document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
 
       // BY COMAN
       let byComanHTML = '';
