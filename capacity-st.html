@@ -18,7 +18,7 @@
     .fc-dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
     table { width:100%; border-collapse:collapse; font-size:12px; table-layout:fixed; }
     th { font-size:11px; color:#888; font-weight:400; text-align:center; padding:4px 6px 8px; border-bottom:0.5px solid rgba(0,0,0,0.08); }
-    th.left { text-align:left; width:160px; }
+    th.left { text-align:left; width:170px; }
     td { padding:5px 6px; text-align:center; }
     td.row-label { text-align:left; font-size:11px; color:#888; white-space:nowrap; }
     td.row-label .sublabel { font-size:10px; color:#bbb; margin-left:4px; }
@@ -32,164 +32,155 @@
   <p class="status" id="status"></p>
   <div class="fc-pills" id="fc-pills"></div>
   <div id="content"></div>
-
+ 
   <script>
     const CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS1nWgrsa3Ek5z-kZlahiqpWT6soZ_8QkpdAH_QCCgeNTATh6oNYHi5BPTMnjZFAyDQH1C9Nv68F4Y_/pub?gid=2001304532&single=true&output=csv';
-
+ 
     const FC_ORDER = ['EWR','MEM','FTW','RNO','SMF','JAX','MKE'];
     const FC_COLORS = {
       'EWR': '#378ADD', 'MEM': '#1D9E75', 'FTW': '#7F77DD',
       'RNO': '#639922', 'SMF': '#888780', 'JAX': '#BA7517', 'MKE': '#D85A30',
     };
-
+ 
     function parseCSV(text) {
+      // Auto-detect delimiter: tab or comma
+      const firstLine = text.split('\n')[0];
+      const delim = firstLine.includes('\t') ? '\t' : ',';
+ 
       return text.trim().split('\n').map(r => {
-        const cols=[]; let cur='', inQ=false;
-        for(let i=0;i<r.length;i++){
-          const ch=r[i];
-          if(ch==='"'){inQ=!inQ;}
-          else if(ch===','&&!inQ){cols.push(cur.trim());cur='';}
-          else{cur+=ch;}
+        if (delim === '\t') return r.split('\t').map(c => c.trim());
+        const cols = []; let cur = '', inQ = false;
+        for (let i = 0; i < r.length; i++) {
+          const ch = r[i];
+          if (ch === '"') { inQ = !inQ; }
+          else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+          else { cur += ch; }
         }
         cols.push(cur.trim());
         return cols;
       });
     }
-
-    function utilColor(v) { return v>=100?'#c0392b':v>=85?'#e67e22':'#27ae60'; }
-    function remainingColor(v) { return v<0?'#c0392b':v<200?'#e67e22':'#27ae60'; }
-
-    let allData={}, weeks=[], selectedFC=null;
-
-    function renderRows(util, remaining, label, sublabel) {
-      let html = '';
-      if(util) {
-        html += '<tr><td class="row-label">Utilization %'+(sublabel?'<span class="sublabel">'+sublabel+'</span>':'')+'</td>';
-        util.forEach(v => {
-          const n = Math.round(parseFloat(v)*100);
-          html += '<td><span class="val-cell" style="color:'+utilColor(n)+';">'+n+'%</span></td>';
-        });
-        html += '</tr>';
-      }
-      if(remaining) {
-        html += '<tr><td class="row-label">Net Avail Pallets'+(sublabel?'<span class="sublabel">'+sublabel+'</span>':'')+'</td>';
-        remaining.forEach(v => {
-          const n = Math.round(parseFloat(v)||0);
-          html += '<td><span class="val-cell" style="color:'+remainingColor(n)+';">'+n.toLocaleString()+'</span></td>';
-        });
-        html += '</tr>';
-      }
+ 
+    function utilColor(v) { return v >= 100 ? '#c0392b' : v >= 85 ? '#e67e22' : '#27ae60'; }
+    function remainingColor(v) { return v < 0 ? '#c0392b' : v < 200 ? '#e67e22' : '#27ae60'; }
+    function ohColor(v) { return v > 2000 ? '#c0392b' : v > 1000 ? '#e67e22' : '#27ae60'; }
+ 
+    let allData = {}, weeks = [], selectedFC = null;
+ 
+    function renderRows(type, values, labelText, sublabel) {
+      if (!values || !values.length) return '';
+      let html = '<tr><td class="row-label">' + labelText + (sublabel ? '<span class="sublabel">' + sublabel + '</span>' : '') + '</td>';
+      values.forEach(v => {
+        let display, color;
+        if (type === 'util') {
+          const n = Math.round(parseFloat(v) * 100);
+          display = n + '%';
+          color = utilColor(n);
+        } else if (type === 'remaining') {
+          const n = Math.round(parseFloat(v) || 0);
+          display = n.toLocaleString();
+          color = remainingColor(n);
+        } else if (type === 'oh') {
+          const n = Math.round(parseFloat(v) || 0);
+          display = n.toLocaleString();
+          color = ohColor(n);
+        } else {
+          const n = Math.round(parseFloat(v) || 0);
+          display = n.toLocaleString();
+          color = '#555';
+        }
+        html += '<td><span class="val-cell" style="color:' + color + ';">' + display + '</span></td>';
+      });
+      html += '</tr>';
       return html;
     }
-
+ 
     function render() {
-      function render() {
-  const content = document.getElementById('content');
-  content.innerHTML = '';
-  const fcsToShow = selectedFC ? [selectedFC] : FC_ORDER;
-
-  // Summary table — only show when All FCs selected
-  if(!selectedFC) {
-    let summary = '<div class="fc-card" style="margin-bottom:16px;"><table style="width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed;"><thead><tr><th style="text-align:left;padding:4px 6px;color:#888;font-weight:400;border-bottom:0.5px solid rgba(0,0,0,0.08);width:140px;">FC</th>';
-    weeks.forEach(w => { summary += '<th style="text-align:center;padding:4px 6px;color:#888;font-weight:400;border-bottom:0.5px solid rgba(0,0,0,0.08);">'+w.replace('/2026','')+'</th>'; });
-    summary += '</tr></thead><tbody>';
-
-    FC_ORDER.forEach(fc => {
-      const d = allData[fc];
-      const dOffsite = allData[fc+' (FC+offsite)'];
-      const rows = [];
-      if(dOffsite && dOffsite.util) rows.push({ label: fc+' w/ offsite', util: dOffsite.util });
-      if(d && d.util) rows.push({ label: dOffsite ? fc+' FC only' : fc, util: d.util });
-
-      rows.forEach((r, ri) => {
-        summary += '<tr>';
-        summary += '<td style="text-align:left;font-size:11px;color:#555;padding:3px 6px;border-bottom:0.5px solid rgba(0,0,0,0.04);">'+r.label+'</td>';
-        r.util.forEach(v => {
-          const n = Math.round(parseFloat(v)*100);
-          summary += '<td style="text-align:center;padding:3px 6px;border-bottom:0.5px solid rgba(0,0,0,0.04);"><span style="font-size:11px;font-weight:500;color:'+utilColor(n)+';">'+n+'%</span></td>';
-        });
-        summary += '</tr>';
-      });
-    });
-
-    summary += '</tbody></table></div>';
-    content.innerHTML = summary;
-  }
-
+      const content = document.getElementById('content');
+      content.innerHTML = '';
+      const fcsToShow = selectedFC ? [selectedFC] : FC_ORDER;
+ 
       fcsToShow.forEach(fc => {
         const d = allData[fc];
-        const dOffsite = allData[fc+' (FC+offsite)'];
-        if(!d && !dOffsite) return;
-
+        const dOffsite = allData[fc + ' (FC+offsite)'];
+        if (!d && !dOffsite) return;
+ 
         const card = document.createElement('div');
         card.className = 'fc-card';
-        const color = FC_COLORS[fc]||'#888';
-
-        let html = '<div class="fc-header"><span class="fc-dot" style="background:'+color+'"></span>'+fc+'</div>';
+        const color = FC_COLORS[fc] || '#888';
+ 
+        let html = '<div class="fc-header"><span class="fc-dot" style="background:' + color + '"></span>' + fc + '</div>';
         html += '<table><thead><tr><th class="left"></th>';
-        weeks.forEach(w => { html += '<th>'+w.replace('/2026','')+'</th>'; });
+        weeks.forEach(w => { html += '<th>' + w + '</th>'; });
         html += '</tr></thead><tbody>';
-
-        if(dOffsite) {
-          // EWR — show w/ offsite rows first, then FC-only rows with divider
-          html += renderRows(dOffsite.util, dOffsite.remaining, fc, 'w/ offsite');
+ 
+        if (dOffsite) {
+          // FC with offsite (e.g. EWR) — show w/ offsite rows first, then FC-only with divider
+          html += renderRows('util', dOffsite.util, 'Utilization %', 'w/ offsite');
+          html += renderRows('remaining', dOffsite.remaining, 'Net Avail Pallets', 'w/ offsite');
           html += '<tr class="divider-row">';
-          html += '<td class="row-label">Utilization % <span class="sublabel">FC only</span></td>';
-          (d.util||[]).forEach(v => {
-            const n = Math.round(parseFloat(v)*100);
-            html += '<td><span class="val-cell" style="color:'+utilColor(n)+';">'+n+'%</span></td>';
-          });
+          html += renderRows('util', d.util, 'Utilization %', 'FC only').replace('<tr>', '').replace('</tr>', '');
           html += '</tr>';
-          html += '<tr><td class="row-label">Net Avail Pallets <span class="sublabel">FC only</span></td>';
-          (d.remaining||[]).forEach(v => {
-            const n = Math.round(parseFloat(v)||0);
-            html += '<td><span class="val-cell" style="color:'+remainingColor(n)+';">'+n.toLocaleString()+'</span></td>';
-          });
-          html += '</tr>';
+          html += renderRows('remaining', d.remaining, 'Net Avail Pallets', 'FC only');
+          if (d.oh) html += renderRows('oh', d.oh, 'On Hand', 'FC only');
         } else {
-          html += renderRows(d.util, d.remaining, fc, null);
+          html += renderRows('util', d.util, 'Utilization %', null);
+          html += renderRows('remaining', d.remaining, 'Net Avail Pallets', null);
+          if (d.oh) html += renderRows('oh', d.oh, 'On Hand', null);
         }
-
+ 
         html += '</tbody></table>';
         card.innerHTML = html;
         content.appendChild(card);
       });
     }
-
+ 
     fetch(CSV)
-      .then(r=>r.text())
-      .then(text=>{
+      .then(r => r.text())
+      .then(text => {
         const rows = parseCSV(text);
         weeks = rows[0].slice(2);
-
+ 
         rows.slice(1).forEach(r => {
-          const type=r[0], fc=r[1];
-          if(!type||!fc) return;
-          if(!allData[fc]) allData[fc]={};
+          const type = r[0], fc = r[1];
+          if (!type || !fc) return;
+          if (!allData[fc]) allData[fc] = {};
           allData[fc][type] = r.slice(2);
         });
-
-        document.getElementById('subtitle').textContent = 'Next 5 weeks · ' + weeks[0] + ' – ' + weeks[weeks.length-1];
+ 
+        document.getElementById('subtitle').textContent = 'Next 5 weeks · ' + weeks[0] + ' – ' + weeks[weeks.length - 1];
         document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
-
-        const pillsEl=document.getElementById('fc-pills');
-        const allPill=document.createElement('div');
-        allPill.className='fc-pill active';
-        allPill.textContent='All FCs';
-        allPill.onclick=()=>{selectedFC=null;document.querySelectorAll('.fc-pill').forEach(p=>p.classList.remove('active'));allPill.classList.add('active');render();};
+ 
+        const pillsEl = document.getElementById('fc-pills');
+        const allPill = document.createElement('div');
+        allPill.className = 'fc-pill active';
+        allPill.textContent = 'All FCs';
+        allPill.onclick = () => {
+          selectedFC = null;
+          document.querySelectorAll('.fc-pill').forEach(p => p.classList.remove('active'));
+          allPill.classList.add('active');
+          render();
+        };
         pillsEl.appendChild(allPill);
-
-        FC_ORDER.filter(fc=>allData[fc]||allData[fc+' (FC+offsite)']).forEach(fc=>{
-          const pill=document.createElement('div');
-          pill.className='fc-pill';
-          pill.textContent=fc;
-          pill.onclick=()=>{selectedFC=fc;document.querySelectorAll('.fc-pill').forEach(p=>p.classList.remove('active'));pill.classList.add('active');render();};
+ 
+        FC_ORDER.filter(fc => allData[fc] || allData[fc + ' (FC+offsite)']).forEach(fc => {
+          const pill = document.createElement('div');
+          pill.className = 'fc-pill';
+          pill.textContent = fc;
+          pill.onclick = () => {
+            selectedFC = fc;
+            document.querySelectorAll('.fc-pill').forEach(p => p.classList.remove('active'));
+            pill.classList.add('active');
+            render();
+          };
           pillsEl.appendChild(pill);
         });
-
+ 
         render();
       })
-      .catch(err=>{document.getElementById('subtitle').textContent='Could not load: '+err.message;});
+      .catch(err => {
+        document.getElementById('subtitle').textContent = 'Could not load: ' + err.message;
+      });
   </script>
 </body>
 </html>
