@@ -38,35 +38,35 @@
     .no-changes { font-size:13px; color:#888; padding:20px; text-align:center; }
     .section-view { display:none; }
     .section-view.active { display:block; }
-    .strategy-card { background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:12px; padding:16px; margin-bottom:10px; }
-    .strategy-title { font-size:13px; font-weight:500; color:#333; margin-bottom:12px; }
-    .flow-row { display:flex; align-items:flex-start; padding:6px 0; border-bottom:0.5px solid rgba(0,0,0,0.04); gap:12px; }
-    .flow-row:last-child { border-bottom:none; }
-    .flow-recipe { width:130px; flex-shrink:0; font-size:11px; color:#666; padding-top:4px; }
-    .flow-segments { display:flex; align-items:center; flex-wrap:wrap; gap:4px; flex:1; }
-    .flow-segment { display:inline-block; }
-    .flow-month { font-size:9px; color:#aaa; margin-bottom:2px; }
-    .flow-fcs { display:flex; flex-wrap:wrap; gap:2px; }
-    .fc-badge { display:inline-block; background:#f1f0e8; color:#5f5e5a; border-radius:4px; padding:1px 6px; font-size:10px; }
-    .flow-arrow { color:#ccc; font-size:12px; padding:0 4px; padding-top:8px; }
-    .flow-arrow.changed { color:#D85A30; font-weight:600; }
+    .strategy-card { background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:12px; margin-bottom:12px; overflow:hidden; }
+    .strategy-header { font-size:12px; font-weight:500; padding:8px 14px; background:#f5f5f3; border-bottom:0.5px solid rgba(0,0,0,0.08); }
+    .strategy-table { width:100%; border-collapse:collapse; font-size:11px; min-width:700px; }
+    .strategy-table th { padding:5px 8px; color:#888; font-weight:400; text-align:center; border-bottom:0.5px solid rgba(0,0,0,0.08); font-size:10px; white-space:nowrap; }
+    .strategy-table th.left { text-align:left; min-width:110px; }
+    .strategy-table td { padding:5px 8px; border-bottom:0.5px solid rgba(0,0,0,0.04); text-align:center; vertical-align:top; }
+    .strategy-table td.left { text-align:left; font-size:11px; color:#555; white-space:nowrap; }
+    .strategy-table tr:last-child td { border-bottom:none; }
+    .fc-stack { display:flex; flex-direction:column; align-items:center; gap:2px; }
+    .fc-tag { display:inline-block; background:#f1f0e8; color:#5f5e5a; border-radius:3px; padding:1px 5px; font-size:10px; white-space:nowrap; }
+    .fc-all { display:inline-block; background:#E6F1FB; color:#0C447C; border-radius:3px; padding:1px 5px; font-size:10px; font-weight:500; }
+    .cell-changed { background:#FFF8F5; }
   </style>
 </head>
 <body>
   <div class="top-tabs">
-    <div class="top-tab active" onclick="switchTab('timeline')">Timeline</div>
-    <div class="top-tab" onclick="switchTab('changes')">Upcoming changes</div>
+    <div class="top-tab" onclick="switchTab('timeline')">Timeline</div>
+    <div class="top-tab active" onclick="switchTab('changes')">Upcoming changes</div>
     <div class="top-tab" onclick="switchTab('strategy')">Coman strategy</div>
   </div>
 
   <p class="status" id="status">Loading...</p>
 
-  <div class="section-view active" id="view-timeline">
+  <div class="section-view" id="view-timeline">
     <div class="fc-pills" id="fc-pills"></div>
     <div id="timeline-content"></div>
   </div>
 
-  <div class="section-view" id="view-changes">
+  <div class="section-view active" id="view-changes">
     <div class="fc-pills" id="fc-pills-changes"></div>
     <div id="changes-content"></div>
   </div>
@@ -91,6 +91,7 @@
     const DEFAULT_COLOR = { bg:'#F1EFE8', border:'#5F5E5A', text:'#444441' };
     const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
     const COMAN_ORDER = ['TX-M','TX-S','IA-I','MN-C','IN-P','IN-S','CO-R'];
+    const ALL_FCS = ['EWR','FTW','JAX','MEM','MKE','OAK'];
 
     function parseMonthLabel(label) {
       const parts = label.trim().split(' ');
@@ -159,6 +160,10 @@
 
     function fcsEqual(a, b) {
       return [...a].sort().join(',') === [...b].sort().join(',');
+    }
+
+    function isAllFCs(fcs) {
+      return ALL_FCS.every(f => fcs.includes(f));
     }
 
     function switchTab(tab) {
@@ -275,47 +280,33 @@
         if(!recipeKeys.length) return;
 
         html += '<div class="strategy-card">';
-        html += `<div class="strategy-title" style="color:${col.text};">${coman}</div>`;
+        html += `<div class="strategy-header" style="color:${col.text};">${coman}</div>`;
+        html += '<div style="overflow-x:auto;"><table class="strategy-table"><thead><tr><th class="left">Recipe</th>';
+        MONTHS.forEach(m => { html += `<th>${m}</th>`; });
+        html += '</tr></thead><tbody>';
 
         recipeKeys.forEach(recipe => {
-          const monthFCs = strategyData[coman][recipe];
+          html += '<tr><td class="left">'+recipe+'</td>';
+          MONTHS.forEach((month, mi) => {
+            const fcs = (strategyData[coman][recipe][month]||[]).sort();
+            const prevFcs = mi > 0 ? (strategyData[coman][recipe][MONTHS[mi-1]]||[]).sort() : fcs;
+            const changed = mi > 0 && !fcsEqual(prevFcs, fcs);
+            const tdClass = changed ? ' class="cell-changed"' : '';
 
-          // Build condensed segments — group consecutive months with same FC list
-          const segments = [];
-          MONTHS.forEach(month => {
-            const fcs = (monthFCs[month]||[]).sort();
-            if(!fcs.length) return;
-            const last = segments[segments.length-1];
-            if(last && fcsEqual(last.fcs, fcs)) {
-              last.months.push(month);
+            if(!fcs.length) {
+              html += '<td>—</td>';
+            } else if(isAllFCs(fcs)) {
+              html += `<td${tdClass}><span class="fc-all">ALL</span></td>`;
             } else {
-              segments.push({ fcs:[...fcs], months:[month] });
+              html += `<td${tdClass}><div class="fc-stack">`;
+              fcs.forEach(fc => { html += `<span class="fc-tag">${fc}</span>`; });
+              html += '</div></td>';
             }
           });
-
-          if(!segments.length) return;
-
-          html += '<div class="flow-row">';
-          html += `<div class="flow-recipe">${recipe}</div>`;
-          html += '<div class="flow-segments">';
-
-          segments.forEach((seg, si) => {
-            const changed = si > 0 && !fcsEqual(segments[si-1].fcs, seg.fcs);
-            if(si > 0) html += `<span class="flow-arrow${changed?' changed':''}">→</span>`;
-            const mLabel = seg.months.length === 1
-              ? seg.months[0]
-              : seg.months[0].split(' ')[0] + ' – ' + seg.months[seg.months.length-1];
-            html += '<div class="flow-segment">';
-            html += `<div class="flow-month">${mLabel}</div>`;
-            html += '<div class="flow-fcs">';
-            seg.fcs.forEach(fc => { html += `<span class="fc-badge">${fc}</span>`; });
-            html += '</div></div>';
-          });
-
-          html += '</div></div>';
+          html += '</tr>';
         });
 
-        html += '</div>';
+        html += '</tbody></table></div></div>';
       });
 
       document.getElementById('strategy-content').innerHTML = html || '<p style="color:#aaa;font-size:13px;padding:20px;">No strategy data available.</p>';
