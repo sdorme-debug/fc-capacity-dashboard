@@ -152,7 +152,12 @@
       document.getElementById('view-bycoman').innerHTML = byComanHTML;
 
       // BY RECIPE
-      const recipeList = [...recipes].sort();
+      const recipeList = [...recipes].sort((a,b) => {
+  const aComans = COMAN_ORDER.filter(c=>data[c]&&data[c][a]).length;
+  const bComans = COMAN_ORDER.filter(c=>data[c]&&data[c][b]).length;
+  if(bComans !== aComans) return bComans - aComans;
+  return a.localeCompare(b); // alphabetical tiebreak
+});
       let byRecipeHTML = '';
       recipeList.forEach(recipe => {
         const comanList = COMAN_ORDER.filter(c=>data[c]&&data[c][recipe]);
