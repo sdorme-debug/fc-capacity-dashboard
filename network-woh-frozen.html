@@ -10,13 +10,13 @@
     h1 { font-size: 16px; font-weight: 500; color: #444; margin-bottom: 4px; }
     .subtitle { font-size: 12px; color: #888; margin-bottom: 16px; }
     .status { font-size: 11px; color: #aaa; margin-bottom: 12px; }
-    .recipe-section { margin-bottom: 10px; background: #fff; border: 0.5px solid rgba(0,0,0,0.1); border-radius: 12px; overflow: hidden; }
-    .recipe-header { font-size: 12px; font-weight: 500; color: #444; padding: 8px 16px; background: #f9f9f8; border-bottom: 0.5px solid rgba(0,0,0,0.08); }
-    .sku-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
-    .sku-cell { padding: 8px 16px; border-bottom: 0.5px solid rgba(0,0,0,0.04); border-right: 0.5px solid rgba(0,0,0,0.04); }
-    .sku-name { font-size: 10px; color: #aaa; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .sku-woh { font-size: 15px; font-weight: 500; }
-    .woh-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 3px; vertical-align: middle; }
+    .recipe-section { margin-bottom: 8px; background: #fff; border: 0.5px solid rgba(0,0,0,0.1); border-radius: 10px; overflow: hidden; }
+    .recipe-header { font-size: 11px; font-weight: 500; color: #555; padding: 6px 12px; background: #f5f5f3; border-bottom: 0.5px solid rgba(0,0,0,0.08); }
+    .sku-list { display: flex; flex-wrap: wrap; gap: 0; }
+    .sku-item { display: flex; align-items: center; gap: 6px; padding: 5px 12px; border-right: 0.5px solid rgba(0,0,0,0.05); border-bottom: 0.5px solid rgba(0,0,0,0.05); min-width: 160px; flex: 1; }
+    .sku-name { font-size: 11px; color: #888; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .sku-woh { font-size: 12px; font-weight: 500; white-space: nowrap; }
+    .woh-dot { display: inline-block; width: 5px; height: 5px; border-radius: 50%; margin-right: 3px; vertical-align: middle; flex-shrink: 0; }
     .c-oos { color: #791F1F; } .c-critical { color: #A32D2D; }
     .c-atrisk { color: #BA7517; } .c-ok { color: #27ae60; } .c-good { color: #1D9E75; }
   </style>
@@ -67,15 +67,14 @@
 
       const groups = {}, groupOrder = [];
       rows.forEach(r => {
-        let cat = r[0]||'Other';
-        if(cat.includes(' : ')) cat = cat.split(' : ')[0].trim();
+        const cat = r[0]||'';
+        if(!cat || cat === 'Other') return;
         const sku = r[1], woh = parseFloat(r[2]);
         if(!sku||isNaN(woh)) return;
         if(!groups[cat]){ groups[cat]=[]; groupOrder.push(cat); }
         groups[cat].push({sku, woh});
       });
 
-      // Dedupe groupOrder
       const seen = new Set();
       const deduped = groupOrder.filter(g => { if(seen.has(g)) return false; seen.add(g); return true; });
 
@@ -84,11 +83,12 @@
         const skus = groups[cat].sort((a,b)=>a.woh-b.woh);
         html += '<div class="recipe-section">';
         html += '<div class="recipe-header">'+cat+'</div>';
-        html += '<div class="sku-grid">';
+        html += '<div class="sku-list">';
         skus.forEach(s => {
-          html += '<div class="sku-cell">';
-          html += '<div class="sku-name" title="'+s.sku+'">'+s.sku+'</div>';
-          html += '<div class="sku-woh '+wohClass(s.woh)+'"><span class="woh-dot" style="background:'+dotColor(s.woh)+';"></span>'+s.woh.toFixed(1)+'</div>';
+          html += '<div class="sku-item">';
+          html += '<span class="woh-dot" style="background:'+dotColor(s.woh)+';"></span>';
+          html += '<span class="sku-name" title="'+s.sku+'">'+s.sku+'</span>';
+          html += '<span class="sku-woh '+wohClass(s.woh)+'">'+s.woh.toFixed(1)+'</span>';
           html += '</div>';
         });
         html += '</div></div>';
