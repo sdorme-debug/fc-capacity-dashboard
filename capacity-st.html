@@ -83,9 +83,38 @@
     }
 
     function render() {
-      const content = document.getElementById('content');
-      content.innerHTML = '';
-      const fcsToShow = selectedFC ? [selectedFC] : FC_ORDER;
+      function render() {
+  const content = document.getElementById('content');
+  content.innerHTML = '';
+  const fcsToShow = selectedFC ? [selectedFC] : FC_ORDER;
+
+  // Summary table — only show when All FCs selected
+  if(!selectedFC) {
+    let summary = '<div class="fc-card" style="margin-bottom:16px;"><table style="width:100%;border-collapse:collapse;font-size:11px;table-layout:fixed;"><thead><tr><th style="text-align:left;padding:4px 6px;color:#888;font-weight:400;border-bottom:0.5px solid rgba(0,0,0,0.08);width:140px;">FC</th>';
+    weeks.forEach(w => { summary += '<th style="text-align:center;padding:4px 6px;color:#888;font-weight:400;border-bottom:0.5px solid rgba(0,0,0,0.08);">'+w.replace('/2026','')+'</th>'; });
+    summary += '</tr></thead><tbody>';
+
+    FC_ORDER.forEach(fc => {
+      const d = allData[fc];
+      const dOffsite = allData[fc+' (FC+offsite)'];
+      const rows = [];
+      if(dOffsite && dOffsite.util) rows.push({ label: fc+' w/ offsite', util: dOffsite.util });
+      if(d && d.util) rows.push({ label: dOffsite ? fc+' FC only' : fc, util: d.util });
+
+      rows.forEach((r, ri) => {
+        summary += '<tr>';
+        summary += '<td style="text-align:left;font-size:11px;color:#555;padding:3px 6px;border-bottom:0.5px solid rgba(0,0,0,0.04);">'+r.label+'</td>';
+        r.util.forEach(v => {
+          const n = Math.round(parseFloat(v)*100);
+          summary += '<td style="text-align:center;padding:3px 6px;border-bottom:0.5px solid rgba(0,0,0,0.04);"><span style="font-size:11px;font-weight:500;color:'+utilColor(n)+';">'+n+'%</span></td>';
+        });
+        summary += '</tr>';
+      });
+    });
+
+    summary += '</tbody></table></div>';
+    content.innerHTML = summary;
+  }
 
       fcsToShow.forEach(fc => {
         const d = allData[fc];
