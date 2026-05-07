@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Coman WOH</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f9f8; color: #1a1a1a; padding: 24px; }
+    h1 { font-size: 16px; font-weight: 500; color: #444; margin-bottom: 4px; }
+    .subtitle { font-size: 12px; color: #888; margin-bottom: 16px; }
+    .status { font-size: 11px; color: #aaa; margin-bottom: 12px; }
+    .top-tabs { display:flex; gap:0; margin-bottom:16px; border-bottom:0.5px solid #ddd; }
+    .top-tab { font-size:12px; padding:6px 16px; cursor:pointer; color:#888; border-bottom:2px solid transparent; margin-bottom:-0.5px; transition:all 0.15s; }
+    .top-tab.active { color:#1a1a1a; border-bottom-color:#1a1a1a; font-weight:500; }
+    .section-view { display:none; }
+    .section-view.active { display:block; }
+    .group-card { background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:10px; margin-bottom:10px; overflow:hidden; }
+    .group-header { font-size:12px; font-weight:500; color:#444; padding:8px 14px; background:#f5f5f3; border-bottom:0.5px solid rgba(0,0,0,0.08); }
+    .woh-table { width:100%; border-collapse:collapse; font-size:11px; overflow-x:auto; display:block; }
+    .woh-table th { padding:5px 10px; color:#888; font-weight:400; text-align:center; border-bottom:0.5px solid rgba(0,0,0,0.08); white-space:nowrap; font-size:10px; }
+    .woh-table th.left { text-align:left; min-width:120px; }
+    .woh-table td { padding:4px 10px; text-align:center; border-bottom:0.5px solid rgba(0,0,0,0.04); font-size:11px; white-space:nowrap; }
+    .woh-table td.left { text-align:left; font-size:11px; color:#555; }
+    .woh-table tr:last-child td { border-bottom:none; }
+    .wv { font-weight:500; }
+    .c-oos { color:#791F1F; } .c-critical { color:#A32D2D; }
+    .c-atrisk { color:#BA7517; } .c-ok { color:#27ae60; } .c-good { color:#1D9E75; }
+    .c-na { color:#ccc; }
+  </style>
+</head>
+<body>
+  <h1>Coman WOH — monthly through EOY</h1>
+  <p class="subtitle" id="subtitle">Loading...</p>
+  <p class="status" id="status"></p>
+
+  <div class="top-tabs">
+    <div class="top-tab active" onclick="switchTab('bycoman')">By coman</div>
+    <div class="top-tab" onclick="switchTab('byrecipe')">By recipe</div>
+  </div>
+
+  <div class="section-view active" id="view-bycoman"></div>
+  <div class="section-view" id="view-byrecipe"></div>
+
+  <script>
+    const CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRgqmVRirhaQ3AKoXv3nRKc1VK7DFlEkUQgfCLBINLi0nYD7zeapoRu7lY4pYP87MarrwiboOXjtzmf/pub?gid=785478594&single=true&output=csv';
+    const COMAN_ORDER = ['TX-M','TX-S','IA-I','MN-C','IN-P','IN-S','CO-R'];
+
+    function parseCSV(text) {
+      return text.trim().split('\n').map(r => {
+        const cols=[]; let cur='', inQ=false;
+        for(let i=0;i<r.length;i++){
+          const ch=r[i];
+          if(ch==='"'){inQ=!inQ;}
+          else if(ch===','&&!inQ){cols.push(cur.trim());cur='';}
+          else{cur+=ch;}
+        }
+        cols.push(cur.trim());
+        return cols;
+      });
+    }
+
+    function wohClass(v) {
+      if(v===null||v===undefined||isNaN(v)) return 'c-na';
+      if(v<=0) return 'c-oos';
+      if(v<1) return 'c-critical';
+      if(v<2) return 'c-atrisk';
+      if(v<4) return 'c-ok';
+      return 'c-good';
+    }
+
+    function wohCell(v) {
+      if(v===null||v===undefined||isNaN(v)) return '<span class="c-na">—</span>';
+      return '<span class="wv '+wohClass(v)+'">'+v.toFixed(1)+'</span>';
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.top-tab').forEach((t,i) => t.classList.toggle('active',['bycoman','byrecipe'][i]===tab));
+      document.getElementById('view-bycoman').classList.toggle('active', tab==='bycoman');
+      document.getElementById('view-byrecipe').classList.toggle('active', tab==='byrecipe');
+    }
+
+    fetch(CSV).then(r=>r.text()).then(text=>{
+      const rows = parseCSV(text).slice(1);
+
+      // Build data structure: data[coman][recipe][month] = woh
+      const data = {}, months = [], recipes = new Set(), comans = new Set();
+      const monthOrder = [];
+
+      rows.forEach(r => {
+        const [coman, recipe, month, woh] = r;
+        if(!coman||!recipe||!month) return;
+        comans.add(coman);
+        recipes.add(recipe);
+        if(!monthOrder.includes(month)) monthOrder.push(month);
+        if(!data[coman]) data[coman] = {};
+        if(!data[coman][recipe]) data[coman][recipe] = {};
+        data[coman][recipe][month] = parseFloat(woh);
+      });
+
+      document.getElementById('subtitle').textContent = monthOrder[0] + ' – ' + monthOrder[monthOrder.length-1];
+      document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
+
+      // BY COMAN view — one card per coman, rows = recipes, cols = months
+      let byComanHTML = '';
+      COMAN_ORDER.filter(c => comans.has(c)).forEach(coman => {
+        const recipeList = Object.keys(data[coman]||{}).sort();
+        if(!recipeList.length) return;
+        byComanHTML += '<div class="group-card"><div class="group-header">'+coman+'</div>';
+        byComanHTML += '<div style="overflow-x:auto;"><table class="woh-table"><thead><tr><th class="left">Recipe</th>';
+        monthOrder.forEach(m => { byComanHTML
