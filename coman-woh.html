@@ -194,13 +194,14 @@
       document.getElementById('view-byrecipe').innerHTML = byRecipeHTML;
 
       // CHARTS
-      let chartsHTML = '';
-      recipeList.forEach((recipe, ri) => {
-        const comanList = COMAN_ORDER.filter(c=>data[c]&&data[c][recipe]);
-        if(!comanList.length) return;
-        chartsHTML += '<div class="group-card"><div class="group-header">'+recipe+'</div><div class="chart-wrap"><canvas id="chart-'+ri+'"></canvas></div></div>';
-      });
-      document.getElementById('view-charts').innerHTML = chartsHTML;
+      let chartsHTML = '<div class="charts-grid">';
+recipeList.forEach((recipe, ri) => {
+  const comanList = COMAN_ORDER.filter(c=>data[c]&&data[c][recipe]);
+  if(!comanList.length) return;
+  chartsHTML += '<div class="group-card"><div class="group-header">'+recipe+'</div><div class="chart-wrap"><canvas id="chart-'+ri+'"></canvas></div></div>';
+});
+chartsHTML += '</div>';
+document.getElementById('view-charts').innerHTML = chartsHTML;
 
       setTimeout(() => {
         recipeList.forEach((recipe, ri) => {
