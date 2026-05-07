@@ -38,12 +38,25 @@
     .no-changes { font-size:13px; color:#888; padding:20px; text-align:center; }
     .section-view { display:none; }
     .section-view.active { display:block; }
+    .strategy-card { background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:12px; padding:16px; margin-bottom:10px; }
+    .strategy-title { font-size:13px; font-weight:500; color:#333; margin-bottom:12px; }
+    .flow-row { display:flex; align-items:flex-start; padding:6px 0; border-bottom:0.5px solid rgba(0,0,0,0.04); gap:12px; }
+    .flow-row:last-child { border-bottom:none; }
+    .flow-recipe { width:130px; flex-shrink:0; font-size:11px; color:#666; padding-top:4px; }
+    .flow-segments { display:flex; align-items:center; flex-wrap:wrap; gap:4px; flex:1; }
+    .flow-segment { display:inline-block; }
+    .flow-month { font-size:9px; color:#aaa; margin-bottom:2px; }
+    .flow-fcs { display:flex; flex-wrap:wrap; gap:2px; }
+    .fc-badge { display:inline-block; background:#f1f0e8; color:#5f5e5a; border-radius:4px; padding:1px 6px; font-size:10px; }
+    .flow-arrow { color:#ccc; font-size:12px; padding:0 4px; padding-top:8px; }
+    .flow-arrow.changed { color:#D85A30; font-weight:600; }
   </style>
 </head>
 <body>
   <div class="top-tabs">
     <div class="top-tab active" onclick="switchTab('timeline')">Timeline</div>
     <div class="top-tab" onclick="switchTab('changes')">Upcoming changes</div>
+    <div class="top-tab" onclick="switchTab('strategy')">Coman strategy</div>
   </div>
 
   <p class="status" id="status">Loading...</p>
@@ -56,6 +69,10 @@
   <div class="section-view" id="view-changes">
     <div class="fc-pills" id="fc-pills-changes"></div>
     <div id="changes-content"></div>
+  </div>
+
+  <div class="section-view" id="view-strategy">
+    <div id="strategy-content"></div>
   </div>
 
   <script>
@@ -73,12 +90,12 @@
     };
     const DEFAULT_COLOR = { bg:'#F1EFE8', border:'#5F5E5A', text:'#444441' };
     const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const COMAN_ORDER = ['TX-M','TX-S','IA-I','MN-C','IN-P','IN-S','CO-R'];
 
     function parseMonthLabel(label) {
       const parts = label.trim().split(' ');
       if(parts.length !== 2) return null;
-      const monthStr = parts[0];
-      const year = parseInt(parts[1]);
+      const monthStr = parts[0], year = parseInt(parts[1]);
       let idx = MONTH_NAMES.findIndex(m => monthStr.startsWith(m));
       if(idx === -1) {
         const fullNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -140,10 +157,14 @@
       return sa.every((x,i) => x.coman === sb[i].coman && x.count === sb[i].count);
     }
 
+    function fcsEqual(a, b) {
+      return [...a].sort().join(',') === [...b].sort().join(',');
+    }
+
     function switchTab(tab) {
-      document.querySelectorAll('.top-tab').forEach((t,i) => t.classList.toggle('active', (i===0&&tab==='timeline')||(i===1&&tab==='changes')));
-      document.getElementById('view-timeline').classList.toggle('active', tab==='timeline');
-      document.getElementById('view-changes').classList.toggle('active', tab==='changes');
+      const tabs = ['timeline','changes','strategy'];
+      document.querySelectorAll('.top-tab').forEach((t,i) => t.classList.toggle('active', tabs[i]===tab));
+      tabs.forEach(v => document.getElementById('view-'+v).classList.toggle('active', v===tab));
     }
 
     function renderTimeline() {
@@ -154,25 +175,16 @@
       fcsToShow.forEach(fc => {
         const section = document.createElement('div');
         section.className = 'fc-section';
-
-        // Use CSS grid so headers and cells align perfectly
         let html = `<div class="fc-title">${fc}</div><div class="timeline"><div class="timeline-grid">`;
+        html += '<div class="grid-header"></div>';
+        MONTHS.forEach(m => { html += `<div class="grid-header">${m}</div>`; });
 
-        // Header row
-        html += '<div class="grid-header"></div>'; // label spacer
-        MONTHS.forEach((m, mi) => {
-          // First month has no arrow so needs full width
-          // Subsequent months share space with arrow
-          html += `<div class="grid-header">${m}</div>`;
-        });
-
-        // Recipe rows
         const recipes = Object.keys(allData[fc] || {}).sort();
         recipes.forEach(recipe => {
           html += `<div class="grid-label" title="${recipe}">${recipe}</div>`;
           MONTHS.forEach((month, mi) => {
             const comans = (allData[fc][recipe][month] || []).sort((a,b)=>b.count-a.count);
-            const prevComans = mi > 0 ? (allData[fc][recipe][MONTHS[mi-1]] || []).sort((a,b)=>b.count-a.count) : [];
+            const prevComans = mi > 0 ? (allData[fc][recipe][MONTHS[mi-1]]||[]).sort((a,b)=>b.count-a.count) : [];
             const changed = mi > 0 && !blocksEqual(prevComans, comans);
             html += `<div class="grid-cell">`;
             if(mi > 0) html += `<div class="arrow-cell${changed?' changed':''}">→</div>`;
@@ -183,7 +195,6 @@
         });
 
         html += '</div></div>';
-
         const seenComans = new Set();
         Object.values(allData[fc]||{}).forEach(r => Object.values(r).forEach(cs => cs.forEach(c => seenComans.add(c.coman))));
         html += '<div class="legend">';
@@ -192,7 +203,6 @@
           html += `<div class="legend-item"><div class="legend-dot" style="background:${col.bg};border:0.5px solid ${col.border};"></div>${c}</div>`;
         });
         html += '</div>';
-
         section.innerHTML = html;
         content.appendChild(section);
       });
@@ -238,6 +248,79 @@
       content.appendChild(section);
     }
 
+    function renderStrategy() {
+      // Build: coman -> recipe -> month -> [fcs]
+      const strategyData = {};
+
+      allFCs.forEach(fc => {
+        Object.keys(allData[fc]||{}).forEach(recipe => {
+          MONTHS.forEach(month => {
+            const comans = allData[fc][recipe][month]||[];
+            comans.forEach(c => {
+              if(!strategyData[c.coman]) strategyData[c.coman] = {};
+              if(!strategyData[c.coman][recipe]) strategyData[c.coman][recipe] = {};
+              if(!strategyData[c.coman][recipe][month]) strategyData[c.coman][recipe][month] = [];
+              if(!strategyData[c.coman][recipe][month].includes(fc)) {
+                strategyData[c.coman][recipe][month].push(fc);
+              }
+            });
+          });
+        });
+      });
+
+      let html = '';
+      COMAN_ORDER.filter(c => strategyData[c]).forEach(coman => {
+        const col = getColor(coman);
+        const recipeKeys = Object.keys(strategyData[coman]).sort();
+        if(!recipeKeys.length) return;
+
+        html += '<div class="strategy-card">';
+        html += `<div class="strategy-title" style="color:${col.text};">${coman}</div>`;
+
+        recipeKeys.forEach(recipe => {
+          const monthFCs = strategyData[coman][recipe];
+
+          // Build condensed segments — group consecutive months with same FC list
+          const segments = [];
+          MONTHS.forEach(month => {
+            const fcs = (monthFCs[month]||[]).sort();
+            if(!fcs.length) return;
+            const last = segments[segments.length-1];
+            if(last && fcsEqual(last.fcs, fcs)) {
+              last.months.push(month);
+            } else {
+              segments.push({ fcs:[...fcs], months:[month] });
+            }
+          });
+
+          if(!segments.length) return;
+
+          html += '<div class="flow-row">';
+          html += `<div class="flow-recipe">${recipe}</div>`;
+          html += '<div class="flow-segments">';
+
+          segments.forEach((seg, si) => {
+            const changed = si > 0 && !fcsEqual(segments[si-1].fcs, seg.fcs);
+            if(si > 0) html += `<span class="flow-arrow${changed?' changed':''}">→</span>`;
+            const mLabel = seg.months.length === 1
+              ? seg.months[0]
+              : seg.months[0].split(' ')[0] + ' – ' + seg.months[seg.months.length-1];
+            html += '<div class="flow-segment">';
+            html += `<div class="flow-month">${mLabel}</div>`;
+            html += '<div class="flow-fcs">';
+            seg.fcs.forEach(fc => { html += `<span class="fc-badge">${fc}</span>`; });
+            html += '</div></div>';
+          });
+
+          html += '</div></div>';
+        });
+
+        html += '</div>';
+      });
+
+      document.getElementById('strategy-content').innerHTML = html || '<p style="color:#aaa;font-size:13px;padding:20px;">No strategy data available.</p>';
+    }
+
     fetch(CSV)
       .then(r => r.text())
       .then(text => {
@@ -279,6 +362,7 @@
 
         renderTimeline();
         renderChanges();
+        renderStrategy();
       })
       .catch(err => { document.getElementById('status').textContent = 'Could not load: ' + err.message; });
   </script>
