@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Coman WOH</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f9f8; color: #1a1a1a; padding: 24px; }
@@ -27,25 +28,32 @@
     .c-oos { color:#791F1F; } .c-critical { color:#A32D2D; }
     .c-atrisk { color:#BA7517; } .c-ok { color:#27ae60; } .c-good { color:#1D9E75; }
     .c-na { color:#ccc; }
+    .chart-wrap { padding:16px; position:relative; height:220px; }
   </style>
 </head>
 <body>
-  <h1>Coman WOH — monthly through EOY</h1>
+  <h1>Coman WOH — 6 month outlook</h1>
   <p class="subtitle" id="subtitle">Loading...</p>
   <p class="status" id="status"></p>
 
   <div class="top-tabs">
     <div class="top-tab active" onclick="switchTab('bycoman')">By coman</div>
     <div class="top-tab" onclick="switchTab('byrecipe')">By recipe</div>
+    <div class="top-tab" onclick="switchTab('charts')">Charts</div>
   </div>
 
   <div class="section-view active" id="view-bycoman"></div>
   <div class="section-view" id="view-byrecipe"></div>
+  <div class="section-view" id="view-charts"></div>
 
   <script>
     const CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRgqmVRirhaQ3AKoXv3nRKc1VK7DFlEkUQgfCLBINLi0nYD7zeapoRu7lY4pYP87MarrwiboOXjtzmf/pub?gid=785478594&single=true&output=csv';
     const COMAN_ORDER = ['TX-M','TX-S','IA-I','MN-C','IN-P','IN-S','CO-R'];
     const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const COMAN_COLORS = {
+      'TX-M': '#378ADD', 'TX-S': '#1D9E75', 'IA-I': '#BA7517',
+      'MN-C': '#7F77DD', 'IN-P': '#D4537E', 'IN-S': '#D85A30', 'CO-R': '#639922',
+    };
 
     function parseCSV(text) {
       return text.trim().split('\n').map(r => {
@@ -63,10 +71,8 @@
 
     function wohClass(v) {
       if(v===null||v===undefined||isNaN(v)) return 'c-na';
-      if(v<=0) return 'c-oos';
-      if(v<1) return 'c-critical';
-      if(v<2) return 'c-atrisk';
-      if(v<4) return 'c-ok';
+      if(v<=0) return 'c-oos'; if(v<1) return 'c-critical';
+      if(v<2) return 'c-atrisk'; if(v<4) return 'c-ok';
       return 'c-good';
     }
 
@@ -76,43 +82,51 @@
     }
 
     function switchTab(tab) {
-      document.querySelectorAll('.top-tab').forEach((t,i) => t.classList.toggle('active',['bycoman','byrecipe'][i]===tab));
-      document.getElementById('view-bycoman').classList.toggle('active', tab==='bycoman');
-      document.getElementById('view-byrecipe').classList.toggle('active', tab==='byrecipe');
+      document.querySelectorAll('.top-tab').forEach((t,i) => t.classList.toggle('active',['bycoman','byrecipe','charts'][i]===tab));
+      ['bycoman','byrecipe','charts'].forEach(v => {
+        document.getElementById('view-'+v).classList.toggle('active', v===tab);
+      });
+    }
+
+    function parseMonthLabel(m) {
+      const [mon, yr] = m.split(' ');
+      return new Date(parseInt(yr), MONTH_NAMES.indexOf(mon), 1);
     }
 
     fetch(CSV).then(r=>r.text()).then(text=>{
       const rows = parseCSV(text).slice(1);
-
-      const data = {}, monthOrder = [], recipes = new Set(), comans = new Set();
+      const data = {}, allMonths = [], recipes = new Set(), comans = new Set();
 
       rows.forEach(r => {
         const [coman, recipe, month, woh] = r;
         if(!coman||!recipe||!month) return;
-        comans.add(coman);
-        recipes.add(recipe);
-        if(!monthOrder.includes(month)) monthOrder.push(month);
+        comans.add(coman); recipes.add(recipe);
+        if(!allMonths.includes(month)) allMonths.push(month);
         if(!data[coman]) data[coman] = {};
         if(!data[coman][recipe]) data[coman][recipe] = {};
         data[coman][recipe][month] = parseFloat(woh);
       });
 
       // Sort months chronologically
-      monthOrder.sort((a,b) => {
-        const [am, ay] = a.split(' ');
-        const [bm, by] = b.split(' ');
-        const ayN = parseInt(ay), byN = parseInt(by);
-        if(ayN !== byN) return ayN - byN;
-        return MONTH_NAMES.indexOf(am) - MONTH_NAMES.indexOf(bm);
+      allMonths.sort((a,b) => {
+        const [am,ay] = a.split(' '), [bm,by] = b.split(' ');
+        const ayN=parseInt(ay), byN=parseInt(by);
+        if(ayN!==byN) return ayN-byN;
+        return MONTH_NAMES.indexOf(am)-MONTH_NAMES.indexOf(bm);
       });
 
-      // Remove coman+recipe combos that are 0 or blank across all months
+      // Filter to 6 months from today
+      const today = new Date();
+      const cutoff = new Date(today.getFullYear(), today.getMonth()+6, 1);
+      const monthOrder = allMonths.filter(m => {
+        const d = parseMonthLabel(m);
+        return d >= new Date(today.getFullYear(), today.getMonth(), 1) && d < cutoff;
+      });
+
+      // Remove all-zero combos
       Object.keys(data).forEach(coman => {
         Object.keys(data[coman]).forEach(recipe => {
-          const allZero = monthOrder.every(m => {
-            const v = data[coman][recipe][m];
-            return !v || v === 0 || isNaN(v);
-          });
+          const allZero = monthOrder.every(m => { const v=data[coman][recipe][m]; return !v||v===0||isNaN(v); });
           if(allZero) delete data[coman][recipe];
         });
       });
@@ -122,19 +136,15 @@
 
       // BY COMAN
       let byComanHTML = '';
-      COMAN_ORDER.filter(c => comans.has(c)).forEach(coman => {
+      COMAN_ORDER.filter(c=>comans.has(c)).forEach(coman => {
         const recipeList = Object.keys(data[coman]||{}).sort();
         if(!recipeList.length) return;
-        byComanHTML += '<div class="group-card"><div class="group-header">'+coman+'</div>';
-        byComanHTML += '<div style="overflow-x:auto;"><table class="woh-table"><thead><tr><th class="left">Recipe</th>';
+        byComanHTML += '<div class="group-card"><div class="group-header">'+coman+'</div><div style="overflow-x:auto;"><table class="woh-table"><thead><tr><th class="left">Recipe</th>';
         monthOrder.forEach(m => { byComanHTML += '<th>'+m+'</th>'; });
         byComanHTML += '</tr></thead><tbody>';
         recipeList.forEach(recipe => {
           byComanHTML += '<tr><td class="left">'+recipe+'</td>';
-          monthOrder.forEach(m => {
-            const v = data[coman][recipe] ? data[coman][recipe][m] : null;
-            byComanHTML += '<td>'+wohCell(v)+'</td>';
-          });
+          monthOrder.forEach(m => { const v=data[coman][recipe]?data[coman][recipe][m]:null; byComanHTML += '<td>'+wohCell(v)+'</td>'; });
           byComanHTML += '</tr>';
         });
         byComanHTML += '</tbody></table></div></div>';
@@ -145,23 +155,67 @@
       const recipeList = [...recipes].sort();
       let byRecipeHTML = '';
       recipeList.forEach(recipe => {
-        const comanList = COMAN_ORDER.filter(c => data[c] && data[c][recipe]);
+        const comanList = COMAN_ORDER.filter(c=>data[c]&&data[c][recipe]);
         if(!comanList.length) return;
-        byRecipeHTML += '<div class="group-card"><div class="group-header">'+recipe+'</div>';
-        byRecipeHTML += '<div style="overflow-x:auto;"><table class="woh-table"><thead><tr><th class="left">Coman</th>';
+        byRecipeHTML += '<div class="group-card"><div class="group-header">'+recipe+'</div><div style="overflow-x:auto;"><table class="woh-table"><thead><tr><th class="left">Coman</th>';
         monthOrder.forEach(m => { byRecipeHTML += '<th>'+m+'</th>'; });
         byRecipeHTML += '</tr></thead><tbody>';
         comanList.forEach(coman => {
           byRecipeHTML += '<tr><td class="left">'+coman+'</td>';
-          monthOrder.forEach(m => {
-            const v = data[coman][recipe] ? data[coman][recipe][m] : null;
-            byRecipeHTML += '<td>'+wohCell(v)+'</td>';
-          });
+          monthOrder.forEach(m => { const v=data[coman][recipe]?data[coman][recipe][m]:null; byRecipeHTML += '<td>'+wohCell(v)+'</td>'; });
           byRecipeHTML += '</tr>';
         });
         byRecipeHTML += '</tbody></table></div></div>';
       });
       document.getElementById('view-byrecipe').innerHTML = byRecipeHTML;
+
+      // CHARTS — one per recipe, comans as lines
+      let chartsHTML = '';
+      recipeList.forEach((recipe, ri) => {
+        const comanList = COMAN_ORDER.filter(c=>data[c]&&data[c][recipe]);
+        if(!comanList.length) return;
+        chartsHTML += '<div class="group-card"><div class="group-header">'+recipe+'</div><div class="chart-wrap"><canvas id="chart-'+ri+'"></canvas></div></div>';
+      });
+      document.getElementById('view-charts').innerHTML = chartsHTML;
+
+      // Build charts after DOM update
+      setTimeout(() => {
+        recipeList.forEach((recipe, ri) => {
+          const comanList = COMAN_ORDER.filter(c=>data[c]&&data[c][recipe]);
+          if(!comanList.length) return;
+          const canvas = document.getElementById('chart-'+ri);
+          if(!canvas) return;
+          new Chart(canvas, {
+            type: 'line',
+            data: {
+              labels: monthOrder,
+              datasets: comanList.map(coman => ({
+                label: coman,
+                data: monthOrder.map(m => data[coman][recipe]?data[coman][recipe][m]||null:null),
+                borderColor: COMAN_COLORS[coman]||'#888',
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                pointRadius: 3,
+                pointBackgroundColor: COMAN_COLORS[coman]||'#888',
+                tension: 0.3,
+                spanGaps: true,
+              }))
+            },
+            options: {
+              responsive: true, maintainAspectRatio: false,
+              interaction: { mode:'index', intersect:false },
+              plugins: {
+                legend: { labels: { font:{ size:10 }, boxWidth:10, padding:8 } },
+                tooltip: { callbacks: { label: ctx => ctx.dataset.label+': '+ctx.parsed.y.toFixed(1) } }
+              },
+              scales: {
+                y: { min:0, ticks:{ font:{size:10} }, grid:{ color:'rgba(0,0,0,0.05)' } },
+                x: { ticks:{ font:{size:10}, autoSkip:false }, grid:{ display:false } }
+              }
+            }
+          });
+        });
+      }, 100);
 
     }).catch(err=>{ document.getElementById('status').textContent='Could not load: '+err.message; });
   </script>
