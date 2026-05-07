@@ -108,4 +108,43 @@
         if(!recipeList.length) return;
         byComanHTML += '<div class="group-card"><div class="group-header">'+coman+'</div>';
         byComanHTML += '<div style="overflow-x:auto;"><table class="woh-table"><thead><tr><th class="left">Recipe</th>';
-        monthOrder.forEach(m => { byComanHTML
+        monthOrder.forEach(m => { byComanHTML += '<th>'+m+'</th>'; });
+        byComanHTML += '</tr></thead><tbody>';
+        recipeList.forEach(recipe => {
+          byComanHTML += '<tr><td class="left">'+recipe+'</td>';
+          monthOrder.forEach(m => {
+            const v = data[coman][recipe] ? data[coman][recipe][m] : null;
+            byComanHTML += '<td>'+wohCell(v)+'</td>';
+          });
+          byComanHTML += '</tr>';
+        });
+        byComanHTML += '</tbody></table></div></div>';
+      });
+      document.getElementById('view-bycoman').innerHTML = byComanHTML;
+
+      // BY RECIPE view — one card per recipe, rows = comans, cols = months
+      const recipeList = [...recipes].sort();
+      let byRecipeHTML = '';
+      recipeList.forEach(recipe => {
+        const comanList = COMAN_ORDER.filter(c => data[c] && data[c][recipe]);
+        if(!comanList.length) return;
+        byRecipeHTML += '<div class="group-card"><div class="group-header">'+recipe+'</div>';
+        byRecipeHTML += '<div style="overflow-x:auto;"><table class="woh-table"><thead><tr><th class="left">Coman</th>';
+        monthOrder.forEach(m => { byRecipeHTML += '<th>'+m+'</th>'; });
+        byRecipeHTML += '</tr></thead><tbody>';
+        comanList.forEach(coman => {
+          byRecipeHTML += '<tr><td class="left">'+coman+'</td>';
+          monthOrder.forEach(m => {
+            const v = data[coman][recipe] ? data[coman][recipe][m] : null;
+            byRecipeHTML += '<td>'+wohCell(v)+'</td>';
+          });
+          byRecipeHTML += '</tr>';
+        });
+        byRecipeHTML += '</tbody></table></div></div>';
+      });
+      document.getElementById('view-byrecipe').innerHTML = byRecipeHTML;
+
+    }).catch(err=>{ document.getElementById('status').textContent='Could not load: '+err.message; });
+  </script>
+</body>
+</html>
