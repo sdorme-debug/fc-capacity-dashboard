@@ -33,14 +33,14 @@
   <p class="subtitle" id="subtitle">Loading...</p>
   <div class="metric-grid" id="metrics"></div>
   <div class="chart-card">
-    <div class="chart-title">Utilization % by FC — monthly average</div>
+    <div class="chart-title">Utilization % by FC</div>
     <div class="legend" id="legend"></div>
     <div style="position: relative; height: 320px;">
       <canvas id="utilChart"></canvas>
     </div>
   </div>
   <div class="chart-card">
-    <div class="chart-title">Remaining slots by FC — monthly average</div>
+    <div class="chart-title">Remaining slots by FC</div>
     <table id="netTable"><thead><tr id="netHead"></tr></thead><tbody id="netBody"></tbody></table>
   </div>
   <p class="status" id="status"></p>
@@ -129,12 +129,25 @@
         const startCutoff = new Date(today.getFullYear(), today.getMonth() + 2, 1);
         const endCutoff   = new Date(2027, 5, 30);
 
+        function parseDate(v) {
+          if (!v || v === '') return null;
+          // Try M/D/YYYY
+          const slashMatch = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+          if (slashMatch) return new Date(parseInt(slashMatch[3]), parseInt(slashMatch[1]) - 1, parseInt(slashMatch[2]));
+          // Try YYYY-MM-DD
+          const isoMatch = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+          if (isoMatch) return new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3]));
+          // Try general Date parse
+          const d = new Date(v);
+          return isNaN(d.getTime()) ? null : d;
+        }
+
         // Build month groups from column 3 onward
         const monthMap = {};
         for (let c = 3; c < dateRow.length; c++) {
           if (!dateRow[c]) continue;
-          const d = new Date(dateRow[c]);
-          if (isNaN(d.getTime())) continue;
+          const d = parseDate(dateRow[c]);
+          if (!d) continue;
           if (d < startCutoff || d > endCutoff) continue;
           const mNum = monthRow[c] ? parseInt(monthRow[c]) : d.getMonth() + 1;
           const key = d.getFullYear() + '-' + String(mNum).padStart(2, '0');
@@ -159,12 +172,12 @@
           return vals.reduce((a, b) => a + b, 0) / vals.length;
         }
 
-        // Util data — stored as decimals like 1.15 = 115%
+        // Util data — stored as percentages e.g. 115 = 115%
         const utilData = UTIL_ROWS.map(f => ({
           fc: f.fc,
           vals: monthKeys.map(k => {
             const avg = avgRow(f.row, monthMap[k].cols);
-            return avg !== null ? Math.round(avg * 10000) / 100 : null;
+            return avg !== null ? Math.round(avg * 10) / 10 : null;
           })
         }));
 
