@@ -102,16 +102,34 @@
         const gelRows   = rows.filter(r => r[0] === 'gels');
         const ohRows    = rows.filter(r => r[0] === 'onhold');
 
-        document.getElementById('subtitle').textContent = allMonths[0] + ' – ' + allMonths[allMonths.length - 1];
+        const today = new Date();
+        const cutoff = new Date(today.getFullYear(), today.getMonth() + 2, 1);
+        const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+        // Filter to months 2+ months out
+        const validIndices = allMonths.map((m, i) => {
+          const parts = m.split(' ');
+          if (parts.length !== 2) return null;
+          const mIdx = MONTH_NAMES.indexOf(parts[0]);
+          const yr = parseInt(parts[1]);
+          if (mIdx === -1 || isNaN(yr)) return null;
+          const d = new Date(yr, mIdx, 1);
+          return d >= cutoff ? i : null;
+        }).filter(i => i !== null);
+
+        const months = validIndices.map(i => allMonths[i]);
+
+        document.getElementById('subtitle').textContent = months[0] + ' – ' + months[months.length - 1];
         document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
 
         // Metric cards
         const metricsEl = document.getElementById('metrics');
         utilRows.forEach(r => {
           const fc = r[1];
-          const vals = r.slice(2).map(v => Math.round(parseFloat(v) * 10000) / 100).filter(v => !isNaN(v));
+          const allVals = r.slice(2);
+          const vals = validIndices.map(i => parseFloat(allVals[i])).filter(v => !isNaN(v));
           const maxVal = Math.max(...vals);
-          const maxMonth = allMonths[r.slice(2).map(v => Math.round(parseFloat(v) * 10000) / 100).indexOf(maxVal)];
+          const maxMonth = months[vals.indexOf(maxVal)];
           const color = maxVal >= 90 ? '#c0392b' : maxVal >= 75 ? '#e67e22' : '#27ae60';
           metricsEl.innerHTML += '<div class="metric"><div class="metric-label">' + fc + ' peak (' + maxMonth + ')</div><div class="metric-value" style="color:' + color + '">' + maxVal.toFixed(1) + '%</div></div>';
         });
@@ -128,14 +146,15 @@
         new Chart(document.getElementById('utilChart'), {
           type: 'line',
           data: {
-            labels: allMonths,
+            labels: months,
             datasets: [
               ...utilRows.map(r => {
                 const fc = r[1];
                 const s = FC_STYLES[fc] || { color: '#888', dash: [] };
+                const allVals = r.slice(2);
                 return {
                   label: fc,
-                  data: r.slice(2).map(v => Math.round(parseFloat(v) * 10000) / 100),
+                  data: validIndices.map(i => parseFloat(allVals[i])),
                   borderColor: s.color,
                   backgroundColor: 'transparent',
                   borderWidth: 2,
@@ -147,7 +166,7 @@
               }),
               {
                 label: '100% cap',
-                data: Array(allMonths.length).fill(100),
+                data: Array(months.length).fill(100),
                 borderColor: '#e74c3c',
                 borderWidth: 1.5,
                 borderDash: [4, 4],
@@ -173,12 +192,13 @@
 
         // Net pallets table
         const head = document.getElementById('netHead');
-        head.innerHTML = '<th>FC</th>' + allMonths.map(m => '<th>' + m + '</th>').join('');
+        head.innerHTML = '<th>FC</th>' + months.map(m => '<th>' + m + '</th>').join('');
         const body = document.getElementById('netBody');
         netRows.forEach(r => {
           const fc = r[1];
-          const cells = r.slice(2).map(v => {
-            const n = Math.round(parseFloat(v));
+          const allVals = r.slice(2);
+          const cells = validIndices.map(i => {
+            const n = Math.round(parseFloat(allVals[i]));
             const cls = n < 0 ? 'neg' : n < 200 ? 'warn' : 'pos';
             return '<td class="' + cls + '">' + n.toLocaleString() + '</td>';
           }).join('');
