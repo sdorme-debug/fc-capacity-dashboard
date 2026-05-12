@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FC Projected Capacity Need — Conservative</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f9f8; color: #1a1a1a; padding: 24px; }
+    h1 { font-size: 16px; font-weight: 500; color: #444; margin-bottom: 4px; }
+    .subtitle { font-size: 12px; color: #888; margin-bottom: 6px; }
+    .context-note { font-size: 12px; color: #b85c00; background: #fff8f0; border: 0.5px solid #f0c090; border-radius: 8px; padding: 10px 14px; margin-bottom: 20px; }
+    .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin-bottom: 20px; }
+    .metric { background: #fff; border: 0.5px solid rgba(0,0,0,0.1); border-radius: 8px; padding: 10px 14px; }
+    .metric-label { font-size: 11px; color: #888; margin-bottom: 4px; }
+    .metric-value { font-size: 20px; font-weight: 500; }
+    .chart-card { background: #fff; border: 0.5px solid rgba(0,0,0,0.1); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+    .chart-title { font-size: 13px; font-weight: 500; color: #444; margin-bottom: 12px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; font-size: 12px; color: #666; }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
+    .status { font-size: 11px; color: #aaa; margin-top: 12px; }
+    .error { color: #c0392b; font-size: 13px; padding: 12px; background: #fdf0ee; border-radius: 8px; }
+
+    /* Net table */
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { text-align: left; padding: 8px 10px; color: #888; font-weight: 500; border-bottom: 0.5px solid rgba(0,0,0,0.1); font-size: 11px; }
+    td { padding: 8px 10px; border-bottom: 0.5px solid rgba(0,0,0,0.06); }
+    tr:last-child td { border-bottom: none; }
+    .fc-label { font-weight: 500; color: #444; }
+    .pos { color: #27ae60; } .warn { color: #e67e22; } .neg { color: #c0392b; }
+
+    /* Assumptions grid */
+    .assumptions-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 4px; }
+    .assumption-card { background: #fff; border: 0.5px solid rgba(0,0,0,0.1); border-radius: 10px; overflow: hidden; }
+    .assumption-header { font-size: 12px; font-weight: 500; color: #fff; padding: 7px 12px; }
+    .assumption-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .assumption-table td { padding: 6px 12px; border-bottom: 0.5px solid rgba(0,0,0,0.05); color: #555; }
+    .assumption-table tr:last-child td { border-bottom: none; }
+    .assumption-table td:last-child { text-align: right; font-weight: 500; color: #333; }
+    .assumption-table tr.total-row td { font-weight: 600; color: #1a1a1a; background: #f9f9f8; border-top: 0.5px solid rgba(0,0,0,0.1); }
+  </style>
+</head>
+<body>
+  <h1>Projected capacity need — Conservative</h1>
+  <p class="subtitle" id="subtitle">Loading...</p>
+  <p class="context-note">⚠️ This view reflects current on-hand and gel pack levels, which are elevated due to operational factors. Numbers shown are monthly averages. See assumptions below.</p>
+
+  <div class="metric-grid" id="metrics"></div>
+
+  <div class="chart-card">
+    <div class="chart-title">Utilization % by FC — monthly average</div>
+    <div class="legend" id="legend"></div>
+    <div style="position: relative; height: 320px;">
+      <canvas id="utilChart"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-title">Net available pallets by FC — monthly average</div>
+    <table id="netTable"><thead><tr id="netHead"></tr></thead><tbody id="netBody"></tbody></table>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-title">Assumptions — inflated pallet capacity per FC</div>
+    <p style="font-size:11px;color:#aaa;margin-bottom:14px;">These pallet counts are currently occupying freezer space beyond normal operating levels and are factored into the utilization figures above.</p>
+    <div class="assumptions-grid" id="assumptions"></div>
+  </div>
+
+  <p class="status" id="status"></p>
+
+  <script>
+    const LT_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSUt2yHzlksCU-YIaqCmYEY_17m_xixMauuYuE7e3OjHdZepZtFcUJjyPtZCc1PVYFgT9hK7L6Vd2qO/pub?gid=359570842&single=true&output=csv';
+
+    const FC_STYLES = {
+      EWR: { color: '#378ADD', dash: [] },
+      MEM: { color: '#1D9E75', dash: [6,3] },
+      MKE: { color: '#D85A30', dash: [3,3] },
+      JAX: { color: '#BA7517', dash: [8,3] },
+      FTW: { color: '#7F77DD', dash: [4,2,1,2] },
+      OAK: { color: '#D4537E', dash: [2,2] },
+    };
+
+    const FC_COLORS = {
+      EWR: '#378ADD', MEM: '#1D9E75', MKE: '#D85A30',
+      JAX: '#BA7517', FTW: '#7F77DD', OAK: '#D4537E',
+    };
+
+    const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    function parseCSV(t) {
+      return t.trim().split('\n').map(r => r.split(',').map(c => c.trim().replace(/^"|"$/g, '')));
+    }
+
+    fetch(LT_URL)
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+      .then(text => {
+        const rows = parseCSV(text);
+        const allMonths = rows[0].slice(2);
+        const utilRows  = rows.filter(r => r[0] === 'util');
+        const netRows   = rows.filter(r => r[0] === 'net');
+        const gelRows   = rows.filter(r => r[0] === 'gels');
+        const ohRows    = rows.filter(r => r[0] === 'onhold');
+
+        document.getElementById('subtitle').textContent = allMonths[0] + ' – ' + allMonths[allMonths.length - 1];
+        document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
+
+        // Metric cards
+        const metricsEl = document.getElementById('metrics');
+        utilRows.forEach(r => {
+          const fc = r[1];
+          const vals = r.slice(2).map(v => Math.round(parseFloat(v) * 10000) / 100).filter(v => !isNaN(v));
+          const maxVal = Math.max(...vals);
+          const maxMonth = allMonths[r.slice(2).map(v => Math.round(parseFloat(v) * 10000) / 100).indexOf(maxVal)];
+          const color = maxVal >= 90 ? '#c0392b' : maxVal >= 75 ? '#e67e22' : '#27ae60';
+          metricsEl.innerHTML += '<div class="metric"><div class="metric-label">' + fc + ' peak (' + maxMonth + ')</div><div class="metric-value" style="color:' + color + '">' + maxVal.toFixed(1) + '%</div></div>';
+        });
+
+        // Legend
+        const legendEl = document.getElementById('legend');
+        utilRows.forEach(r => {
+          const fc = r[1];
+          const s = FC_STYLES[fc] || { color: '#888' };
+          legendEl.innerHTML += '<div class="legend-item"><span style="display:inline-block;width:20px;height:2px;background:' + s.color + '"></span>' + fc + '</div>';
+        });
+
+        // Util chart
+        new Chart(document.getElementById('utilChart'), {
+          type: 'line',
+          data: {
+            labels: allMonths,
+            datasets: [
+              ...utilRows.map(r => {
+                const fc = r[1];
+                const s = FC_STYLES[fc] || { color: '#888', dash: [] };
+                return {
+                  label: fc,
+                  data: r.slice(2).map(v => Math.round(parseFloat(v) * 10000) / 100),
+                  borderColor: s.color,
+                  backgroundColor: 'transparent',
+                  borderWidth: 2,
+                  borderDash: s.dash,
+                  pointRadius: 3,
+                  pointBackgroundColor: s.color,
+                  tension: 0.3,
+                };
+              }),
+              {
+                label: '100% cap',
+                data: Array(allMonths.length).fill(100),
+                borderColor: '#e74c3c',
+                borderWidth: 1.5,
+                borderDash: [4, 4],
+                pointRadius: 0,
+                backgroundColor: 'transparent',
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { display: false },
+              tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(1) + '%' } }
+            },
+            scales: {
+              y: { min: 0, max: 130, ticks: { callback: v => v + '%', font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.06)' } },
+              x: { ticks: { font: { size: 11 }, autoSkip: false }, grid: { display: false } }
+            }
+          }
+        });
+
+        // Net pallets table
+        const head = document.getElementById('netHead');
+        head.innerHTML = '<th>FC</th>' + allMonths.map(m => '<th>' + m + '</th>').join('');
+        const body = document.getElementById('netBody');
+        netRows.forEach(r => {
+          const fc = r[1];
+          const cells = r.slice(2).map(v => {
+            const n = Math.round(parseFloat(v));
+            const cls = n < 0 ? 'neg' : n < 200 ? 'warn' : 'pos';
+            return '<td class="' + cls + '">' + n.toLocaleString() + '</td>';
+          }).join('');
+          body.innerHTML += '<tr><td class="fc-label">' + fc + '</td>' + cells + '</tr>';
+        });
+
+        // Assumptions cards
+        const assumptionsEl = document.getElementById('assumptions');
+        const fcs = gelRows.map(r => r[1]);
+        fcs.forEach(fc => {
+          const gelRow = gelRows.find(r => r[1] === fc);
+          const ohRow  = ohRows.find(r => r[1] === fc);
+          const gels   = gelRow ? Math.round(parseFloat(gelRow[2]) || 0) : 0;
+          const oh     = ohRow  ? Math.round(parseFloat(ohRow[2])  || 0) : 0;
+          const total  = gels + oh;
+          const color  = FC_COLORS[fc] || '#888';
+
+          assumptionsEl.innerHTML += `
+            <div class="assumption-card">
+              <div class="assumption-header" style="background:${color};">${fc}</div>
+              <table class="assumption-table">
+                <tr><td>Assumed Gels</td><td>${gels.toLocaleString()}</td></tr>
+                <tr><td>Assumed On Hold</td><td>${oh.toLocaleString()}</td></tr>
+                <tr class="total-row"><td>Total</td><td>${total.toLocaleString()}</td></tr>
+              </table>
+            </div>`;
+        });
+      })
+      .catch(err => {
+        document.getElementById('metrics').innerHTML = '<div class="error">Could not load data: ' + err.message + '</div>';
+      });
+  </script>
+</body>
+</html>
