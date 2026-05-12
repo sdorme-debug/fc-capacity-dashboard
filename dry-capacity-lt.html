@@ -61,41 +61,6 @@
 
     const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-    // Row indices (0-based):
-    // Row 0 = blank
-    // Row 1 = year
-    // Row 2 = month number
-    // Row 3 = dates
-    // Row 4-10 = OH Pallets (EWR,MEM,FTW,RNO,SMF,JAX,MKE)
-    // Row 11 = blank
-    // Row 12-19 = Max Capacity
-    // Row 20 = blank
-    // Row 21-28 = Utilization % (EWR FC+offsite, EWR, MEM, FTW, RNO, SMF, JAX, MKE)
-    // Row 29 = blank
-    // Row 30+ = Remaining Slots
-
-    const UTIL_ROWS = [
-      { fc: 'EWR (FC+offsite)', row: 21 },
-      { fc: 'EWR',              row: 22 },
-      { fc: 'MEM',              row: 23 },
-      { fc: 'FTW',              row: 24 },
-      { fc: 'RNO',              row: 25 },
-      { fc: 'SMF',              row: 26 },
-      { fc: 'JAX',              row: 27 },
-      { fc: 'MKE',              row: 28 },
-    ];
-
-    const REMAINING_ROWS = [
-      { fc: 'EWR (FC+offsite)', row: 30 },
-      { fc: 'EWR',              row: 31 },
-      { fc: 'MEM',              row: 32 },
-      { fc: 'FTW',              row: 33 },
-      { fc: 'RNO',              row: 34 },
-      { fc: 'SMF',              row: 35 },
-      { fc: 'JAX',              row: 36 },
-      { fc: 'MKE',              row: 37 },
-    ];
-
     function parseCSV(text) {
       return text.trim().split('\n').map(r => {
         const cols = []; let cur = '', inQ = false;
@@ -110,53 +75,46 @@
       });
     }
 
+    function parseMonthLabel(label) {
+      // "May 2026" or "Jun 2026"
+      const parts = label.trim().split(' ');
+      if (parts.length !== 2) return null;
+      const mIdx = MONTH_NAMES.indexOf(parts[0]);
+      const yr = parseInt(parts[1]);
+      if (mIdx === -1 || isNaN(yr)) return null;
+      return new Date(yr, mIdx, 1);
+    }
+
     function parseVal(v) {
       if (!v || v === '' || v === '#DIV/0!' || v === '#N/A') return null;
       const n = parseFloat(v.toString().replace('%', '').replace(/,/g, ''));
       return isNaN(n) ? null : n;
     }
 
+    const today = new Date();
+    const startCutoff = new Date(today.getFullYear(), today.getMonth() + 2, 1);
+    const endCutoff = new Date(2027, 5, 30);
+
     fetch(CSV_URL)
       .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
       .then(text => {
         const rows = parseCSV(text);
 
-        // Row 2 (index 2) = month numbers, Row 3 (index 3) = dates
-        const monthRow = rows[2];
-        const dateRow  = rows[3];
+        // Row 0 = header: type, FC, May 2026, Jun 2026...
+        const header = rows[0];
+        const allMonths = header.slice(2);
 
-        const today = new Date();
-        const startCutoff = new Date(today.getFullYear(), today.getMonth() + 2, 1);
-        const endCutoff   = new Date(2027, 5, 30);
-
-        function parseDate(v) {
-          if (!v || v === '') return null;
-          // Try M/D/YYYY
-          const slashMatch = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-          if (slashMatch) return new Date(parseInt(slashMatch[3]), parseInt(slashMatch[1]) - 1, parseInt(slashMatch[2]));
-          // Try YYYY-MM-DD
-          const isoMatch = v.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-          if (isoMatch) return new Date(parseInt(isoMatch[1]), parseInt(isoMatch[2]) - 1, parseInt(isoMatch[3]));
-          // Try general Date parse
-          const d = new Date(v);
-          return isNaN(d.getTime()) ? null : d;
-        }
-
-        // Build month groups from column 3 onward
-        const monthMap = {};
-        for (let c = 3; c < dateRow.length; c++) {
-          if (!dateRow[c]) continue;
-          const d = parseDate(dateRow[c]);
-          if (!d) continue;
-          if (d < startCutoff || d > endCutoff) continue;
-          const mNum = monthRow[c] ? parseInt(monthRow[c]) : d.getMonth() + 1;
-          const key = d.getFullYear() + '-' + String(mNum).padStart(2, '0');
-          if (!monthMap[key]) monthMap[key] = { cols: [], month: mNum, year: d.getFullYear() };
-          monthMap[key].cols.push(c);
-        }
-
-        const monthKeys = Object.keys(monthMap).sort();
-        const months = monthKeys.map(k => MONTH_NAMES[monthMap[k].month - 1] + ' ' + monthMap[k].year);
+        // Filter to months in range
+        const validIndices = [];
+        const months = [];
+        allMonths.forEach((m, i) => {
+          const d = parseMonthLabel(m);
+          if (!d) return;
+          if (d >= startCutoff && d <= endCutoff) {
+            validIndices.push(i + 2); // +2 because header has type, FC first
+            months.push(m);
+          }
+        });
 
         if (months.length === 0) {
           document.getElementById('subtitle').textContent = 'No data available for the selected range';
@@ -166,46 +124,27 @@
         document.getElementById('subtitle').textContent = months[0] + ' – ' + months[months.length - 1];
         document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
 
-        function avgRow(rowIdx, cols) {
-          const vals = cols.map(c => parseVal(rows[rowIdx] ? rows[rowIdx][c] : null)).filter(v => v !== null);
-          if (!vals.length) return null;
-          return vals.reduce((a, b) => a + b, 0) / vals.length;
-        }
-
-        // Util data — stored as decimals e.g. 1.15 = 115%
-        const utilData = UTIL_ROWS.map(f => ({
-          fc: f.fc,
-          vals: monthKeys.map(k => {
-            const avg = avgRow(f.row, monthMap[k].cols);
-            return avg !== null ? Math.round(avg * 1000) / 10 : null;
-          })
-        }));
-
-        // Remaining data
-        const remainingData = REMAINING_ROWS.map(f => ({
-          fc: f.fc,
-          vals: monthKeys.map(k => {
-            const avg = avgRow(f.row, monthMap[k].cols);
-            return avg !== null ? Math.round(avg) : null;
-          })
-        }));
+        const utilRows     = rows.filter(r => r[0] === 'util');
+        const remainingRows = rows.filter(r => r[0] === 'remaining');
 
         // Metric cards
         const metricsEl = document.getElementById('metrics');
-        utilData.forEach(d => {
-          const validVals = d.vals.filter(v => v !== null);
-          if (!validVals.length) return;
-          const maxVal = Math.max(...validVals);
-          const maxMonth = months[d.vals.indexOf(maxVal)];
+        utilRows.forEach(r => {
+          const fc = r[1];
+          const vals = validIndices.map(i => parseVal(r[i])).filter(v => v !== null);
+          if (!vals.length) return;
+          const maxVal = Math.max(...vals);
+          const maxMonth = months[validIndices.map(i => parseVal(r[i])).indexOf(maxVal)];
           const color = maxVal >= 90 ? '#c0392b' : maxVal >= 75 ? '#e67e22' : '#27ae60';
-          metricsEl.innerHTML += '<div class="metric"><div class="metric-label">' + d.fc + ' peak (' + maxMonth + ')</div><div class="metric-value" style="color:' + color + '">' + maxVal.toFixed(1) + '%</div></div>';
+          metricsEl.innerHTML += '<div class="metric"><div class="metric-label">' + fc + ' peak (' + maxMonth + ')</div><div class="metric-value" style="color:' + color + '">' + maxVal.toFixed(1) + '%</div></div>';
         });
 
         // Legend
         const legendEl = document.getElementById('legend');
-        utilData.forEach(d => {
-          const s = FC_STYLES[d.fc] || { color: '#888' };
-          legendEl.innerHTML += '<div class="legend-item"><span style="display:inline-block;width:20px;height:2px;background:' + s.color + '"></span>' + d.fc + '</div>';
+        utilRows.forEach(r => {
+          const fc = r[1];
+          const s = FC_STYLES[fc] || { color: '#888' };
+          legendEl.innerHTML += '<div class="legend-item"><span style="display:inline-block;width:20px;height:2px;background:' + s.color + '"></span>' + fc + '</div>';
         });
 
         // Chart
@@ -214,11 +153,12 @@
           data: {
             labels: months,
             datasets: [
-              ...utilData.map(d => {
-                const s = FC_STYLES[d.fc] || { color: '#888', dash: [] };
+              ...utilRows.map(r => {
+                const fc = r[1];
+                const s = FC_STYLES[fc] || { color: '#888', dash: [] };
                 return {
-                  label: d.fc,
-                  data: d.vals,
+                  label: fc,
+                  data: validIndices.map(i => parseVal(r[i])),
                   borderColor: s.color,
                   backgroundColor: 'transparent',
                   borderWidth: 2,
@@ -249,7 +189,7 @@
               tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + (ctx.parsed.y !== null ? ctx.parsed.y.toFixed(1) + '%' : '—') } }
             },
             scales: {
-              y: { min: 0, max: 130, ticks: { callback: v => v + '%', font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.06)' } },
+              y: { min: 0, max: 200, ticks: { callback: v => v + '%', font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.06)' } },
               x: { ticks: { font: { size: 11 }, autoSkip: false }, grid: { display: false } }
             }
           }
@@ -259,13 +199,16 @@
         const head = document.getElementById('netHead');
         head.innerHTML = '<th>FC</th>' + months.map(m => '<th>' + m + '</th>').join('');
         const body = document.getElementById('netBody');
-        remainingData.forEach(d => {
-          const cells = d.vals.map(v => {
-            if (v === null) return '<td class="warn">—</td>';
-            const cls = v < 0 ? 'neg' : v < 200 ? 'warn' : 'pos';
-            return '<td class="' + cls + '">' + v.toLocaleString() + '</td>';
+        remainingRows.forEach(r => {
+          const fc = r[1];
+          const cells = validIndices.map(i => {
+            const v = parseVal(r[i]);
+            if (v === null) return '<td>—</td>';
+            const n = Math.round(v);
+            const cls = n < 0 ? 'neg' : n < 200 ? 'warn' : 'pos';
+            return '<td class="' + cls + '">' + n.toLocaleString() + '</td>';
           }).join('');
-          body.innerHTML += '<tr><td class="fc-label">' + d.fc + '</td>' + cells + '</tr>';
+          body.innerHTML += '<tr><td class="fc-label">' + fc + '</td>' + cells + '</tr>';
         });
       })
       .catch(err => {
