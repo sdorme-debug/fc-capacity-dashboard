@@ -86,14 +86,14 @@
     ];
 
     const REMAINING_ROWS = [
-      { fc: 'EWR (FC+offsite)', row: 31 },
-      { fc: 'EWR',              row: 32 },
-      { fc: 'MEM',              row: 33 },
-      { fc: 'FTW',              row: 34 },
-      { fc: 'RNO',              row: 35 },
-      { fc: 'SMF',              row: 36 },
-      { fc: 'JAX',              row: 37 },
-      { fc: 'MKE',              row: 38 },
+      { fc: 'EWR (FC+offsite)', row: 30 },
+      { fc: 'EWR',              row: 31 },
+      { fc: 'MEM',              row: 32 },
+      { fc: 'FTW',              row: 33 },
+      { fc: 'RNO',              row: 34 },
+      { fc: 'SMF',              row: 35 },
+      { fc: 'JAX',              row: 36 },
+      { fc: 'MKE',              row: 37 },
     ];
 
     function parseCSV(text) {
@@ -172,12 +172,12 @@
           return vals.reduce((a, b) => a + b, 0) / vals.length;
         }
 
-        // Util data — stored as percentages e.g. 115 = 115%
+        // Util data — stored as decimals e.g. 1.15 = 115%
         const utilData = UTIL_ROWS.map(f => ({
           fc: f.fc,
           vals: monthKeys.map(k => {
             const avg = avgRow(f.row, monthMap[k].cols);
-            return avg !== null ? Math.round(avg * 10) / 10 : null;
+            return avg !== null ? Math.round(avg * 1000) / 10 : null;
           })
         }));
 
