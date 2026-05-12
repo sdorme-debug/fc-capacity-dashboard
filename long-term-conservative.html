@@ -104,9 +104,10 @@
 
         const today = new Date();
         const cutoff = new Date(today.getFullYear(), today.getMonth() + 2, 1);
+        const endCutoff = new Date(2026, 11, 31);
         const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-        // Filter to months 2+ months out
+        // Filter to months 2+ months out, up to Dec 2026
         const validIndices = allMonths.map((m, i) => {
           const parts = m.split(' ');
           if (parts.length !== 2) return null;
@@ -114,7 +115,7 @@
           const yr = parseInt(parts[1]);
           if (mIdx === -1 || isNaN(yr)) return null;
           const d = new Date(yr, mIdx, 1);
-          return d >= cutoff ? i : null;
+          return d >= cutoff && d <= endCutoff ? i : null;
         }).filter(i => i !== null);
 
         const months = validIndices.map(i => allMonths[i]);
