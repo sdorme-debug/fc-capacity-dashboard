@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FC Projected Dry Capacity Need</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f9f8; color: #1a1a1a; padding: 24px; }
+    h1 { font-size: 16px; font-weight: 500; color: #444; margin-bottom: 4px; }
+    .subtitle { font-size: 12px; color: #888; margin-bottom: 20px; }
+    .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 8px; margin-bottom: 20px; }
+    .metric { background: #fff; border: 0.5px solid rgba(0,0,0,0.1); border-radius: 8px; padding: 10px 14px; }
+    .metric-label { font-size: 11px; color: #888; margin-bottom: 4px; }
+    .metric-value { font-size: 20px; font-weight: 500; }
+    .chart-card { background: #fff; border: 0.5px solid rgba(0,0,0,0.1); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+    .chart-title { font-size: 13px; font-weight: 500; color: #444; margin-bottom: 12px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 14px; font-size: 12px; color: #666; }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
+    .status { font-size: 11px; color: #aaa; margin-top: 12px; }
+    .error { color: #c0392b; font-size: 13px; padding: 12px; background: #fdf0ee; border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { text-align: left; padding: 8px 10px; color: #888; font-weight: 500; border-bottom: 0.5px solid rgba(0,0,0,0.1); font-size: 11px; }
+    td { padding: 8px 10px; border-bottom: 0.5px solid rgba(0,0,0,0.06); }
+    tr:last-child td { border-bottom: none; }
+    .fc-label { font-weight: 500; color: #444; }
+    .pos { color: #27ae60; } .warn { color: #e67e22; } .neg { color: #c0392b; }
+  </style>
+</head>
+<body>
+  <h1>Projected dry capacity need</h1>
+  <p class="subtitle" id="subtitle">Loading...</p>
+  <div class="metric-grid" id="metrics"></div>
+  <div class="chart-card">
+    <div class="chart-title">Utilization % by FC — monthly average</div>
+    <div class="legend" id="legend"></div>
+    <div style="position: relative; height: 320px;">
+      <canvas id="utilChart"></canvas>
+    </div>
+  </div>
+  <div class="chart-card">
+    <div class="chart-title">Remaining slots by FC — monthly average</div>
+    <table id="netTable"><thead><tr id="netHead"></tr></thead><tbody id="netBody"></tbody></table>
+  </div>
+  <p class="status" id="status"></p>
+
+  <script>
+    const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQiDgH4o8p0J8fySDLOMMFujjNVsput_1yPA-dsTCfCtajbD7ozpfZSp_V3qcTJWUQOr4z9BI-fcvaW/pub?gid=1136008380&single=true&output=csv';
+
+    const FC_STYLES = {
+      'EWR (FC+offsite)': { color: '#378ADD', dash: [2,2] },
+      'EWR':  { color: '#378ADD', dash: [] },
+      'MEM':  { color: '#1D9E75', dash: [6,3] },
+      'FTW':  { color: '#7F77DD', dash: [4,2,1,2] },
+      'RNO':  { color: '#639922', dash: [3,3] },
+      'SMF':  { color: '#888780', dash: [8,3] },
+      'JAX':  { color: '#BA7517', dash: [4,4] },
+      'MKE':  { color: '#D85A30', dash: [2,2] },
+    };
+
+    const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    // Row indices (0-based):
+    // Row 0 = blank
+    // Row 1 = year
+    // Row 2 = month number
+    // Row 3 = dates
+    // Row 4-10 = OH Pallets (EWR,MEM,FTW,RNO,SMF,JAX,MKE)
+    // Row 11 = blank
+    // Row 12-19 = Max Capacity
+    // Row 20 = blank
+    // Row 21-28 = Utilization % (EWR FC+offsite, EWR, MEM, FTW, RNO, SMF, JAX, MKE)
+    // Row 29 = blank
+    // Row 30+ = Remaining Slots
+
+    const UTIL_ROWS = [
+      { fc: 'EWR (FC+offsite)', row: 21 },
+      { fc: 'EWR',              row: 22 },
+      { fc: 'MEM',              row: 23 },
+      { fc: 'FTW',              row: 24 },
+      { fc: 'RNO',              row: 25 },
+      { fc: 'SMF',              row: 26 },
+      { fc: 'JAX',              row: 27 },
+      { fc: 'MKE',              row: 28 },
+    ];
+
+    const REMAINING_ROWS = [
+      { fc: 'EWR (FC+offsite)', row: 31 },
+      { fc: 'EWR',              row: 32 },
+      { fc: 'MEM',              row: 33 },
+      { fc: 'FTW',              row: 34 },
+      { fc: 'RNO',              row: 35 },
+      { fc: 'SMF',              row: 36 },
+      { fc: 'JAX',              row: 37 },
+      { fc: 'MKE',              row: 38 },
+    ];
+
+    function parseCSV(text) {
+      return text.trim().split('\n').map(r => {
+        const cols = []; let cur = '', inQ = false;
+        for (let i = 0; i < r.length; i++) {
+          const ch = r[i];
+          if (ch === '"') { inQ = !inQ; }
+          else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+          else { cur += ch; }
+        }
+        cols.push(cur.trim());
+        return cols;
+      });
+    }
+
+    function parseVal(v) {
+      if (!v || v === '' || v === '#DIV/0!' || v === '#N/A') return null;
+      const n = parseFloat(v.toString().replace('%', '').replace(/,/g, ''));
+      return isNaN(n) ? null : n;
+    }
+
+    fetch(CSV_URL)
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+      .then(text => {
+        const rows = parseCSV(text);
+
+        // Row 2 (index 2) = month numbers, Row 3 (index 3) = dates
+        const monthRow = rows[2];
+        const dateRow  = rows[3];
+
+        const today = new Date();
+        const startCutoff = new Date(today.getFullYear(), today.getMonth() + 2, 1);
+        const endCutoff   = new Date(2027, 5, 30);
+
+        // Build month groups from column 3 onward
+        const monthMap = {};
+        for (let c = 3; c < dateRow.length; c++) {
+          if (!dateRow[c]) continue;
+          const d = new Date(dateRow[c]);
+          if (isNaN(d.getTime())) continue;
+          if (d < startCutoff || d > endCutoff) continue;
+          const mNum = monthRow[c] ? parseInt(monthRow[c]) : d.getMonth() + 1;
+          const key = d.getFullYear() + '-' + String(mNum).padStart(2, '0');
+          if (!monthMap[key]) monthMap[key] = { cols: [], month: mNum, year: d.getFullYear() };
+          monthMap[key].cols.push(c);
+        }
+
+        const monthKeys = Object.keys(monthMap).sort();
+        const months = monthKeys.map(k => MONTH_NAMES[monthMap[k].month - 1] + ' ' + monthMap[k].year);
+
+        if (months.length === 0) {
+          document.getElementById('subtitle').textContent = 'No data available for the selected range';
+          return;
+        }
+
+        document.getElementById('subtitle').textContent = months[0] + ' – ' + months[months.length - 1];
+        document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
+
+        function avgRow(rowIdx, cols) {
+          const vals = cols.map(c => parseVal(rows[rowIdx] ? rows[rowIdx][c] : null)).filter(v => v !== null);
+          if (!vals.length) return null;
+          return vals.reduce((a, b) => a + b, 0) / vals.length;
+        }
+
+        // Util data — stored as decimals like 1.15 = 115%
+        const utilData = UTIL_ROWS.map(f => ({
+          fc: f.fc,
+          vals: monthKeys.map(k => {
+            const avg = avgRow(f.row, monthMap[k].cols);
+            return avg !== null ? Math.round(avg * 10000) / 100 : null;
+          })
+        }));
+
+        // Remaining data
+        const remainingData = REMAINING_ROWS.map(f => ({
+          fc: f.fc,
+          vals: monthKeys.map(k => {
+            const avg = avgRow(f.row, monthMap[k].cols);
+            return avg !== null ? Math.round(avg) : null;
+          })
+        }));
+
+        // Metric cards
+        const metricsEl = document.getElementById('metrics');
+        utilData.forEach(d => {
+          const validVals = d.vals.filter(v => v !== null);
+          if (!validVals.length) return;
+          const maxVal = Math.max(...validVals);
+          const maxMonth = months[d.vals.indexOf(maxVal)];
+          const color = maxVal >= 90 ? '#c0392b' : maxVal >= 75 ? '#e67e22' : '#27ae60';
+          metricsEl.innerHTML += '<div class="metric"><div class="metric-label">' + d.fc + ' peak (' + maxMonth + ')</div><div class="metric-value" style="color:' + color + '">' + maxVal.toFixed(1) + '%</div></div>';
+        });
+
+        // Legend
+        const legendEl = document.getElementById('legend');
+        utilData.forEach(d => {
+          const s = FC_STYLES[d.fc] || { color: '#888' };
+          legendEl.innerHTML += '<div class="legend-item"><span style="display:inline-block;width:20px;height:2px;background:' + s.color + '"></span>' + d.fc + '</div>';
+        });
+
+        // Chart
+        new Chart(document.getElementById('utilChart'), {
+          type: 'line',
+          data: {
+            labels: months,
+            datasets: [
+              ...utilData.map(d => {
+                const s = FC_STYLES[d.fc] || { color: '#888', dash: [] };
+                return {
+                  label: d.fc,
+                  data: d.vals,
+                  borderColor: s.color,
+                  backgroundColor: 'transparent',
+                  borderWidth: 2,
+                  borderDash: s.dash,
+                  pointRadius: 3,
+                  pointBackgroundColor: s.color,
+                  tension: 0.3,
+                  spanGaps: true,
+                };
+              }),
+              {
+                label: '100% cap',
+                data: Array(months.length).fill(100),
+                borderColor: '#e74c3c',
+                borderWidth: 1.5,
+                borderDash: [4, 4],
+                pointRadius: 0,
+                backgroundColor: 'transparent',
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { display: false },
+              tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + (ctx.parsed.y !== null ? ctx.parsed.y.toFixed(1) + '%' : '—') } }
+            },
+            scales: {
+              y: { min: 0, max: 130, ticks: { callback: v => v + '%', font: { size: 11 } }, grid: { color: 'rgba(0,0,0,0.06)' } },
+              x: { ticks: { font: { size: 11 }, autoSkip: false }, grid: { display: false } }
+            }
+          }
+        });
+
+        // Remaining slots table
+        const head = document.getElementById('netHead');
+        head.innerHTML = '<th>FC</th>' + months.map(m => '<th>' + m + '</th>').join('');
+        const body = document.getElementById('netBody');
+        remainingData.forEach(d => {
+          const cells = d.vals.map(v => {
+            if (v === null) return '<td class="warn">—</td>';
+            const cls = v < 0 ? 'neg' : v < 200 ? 'warn' : 'pos';
+            return '<td class="' + cls + '">' + v.toLocaleString() + '</td>';
+          }).join('');
+          body.innerHTML += '<tr><td class="fc-label">' + d.fc + '</td>' + cells + '</tr>';
+        });
+      })
+      .catch(err => {
+        document.getElementById('metrics').innerHTML = '<div class="error">Could not load data: ' + err.message + '</div>';
+      });
+  </script>
+</body>
+</html>
