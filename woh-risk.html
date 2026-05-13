@@ -43,6 +43,21 @@
     .section-view.active { display:block; }
     .dataset-view { display:none; }
     .dataset-view.active { display:block; }
+
+    /* Summary tab styles */
+    #view-summary { display:none; }
+    #view-summary.active { display:block; }
+    .summary-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+    .summary-section-title { font-size:12px; font-weight:500; color:#444; margin-bottom:8px; }
+    .summary-week-label { font-size:10px; color:#aaa; font-weight:500; letter-spacing:0.05em; text-transform:uppercase; padding:6px 10px 4px; background:#f9f9f8; border-bottom:0.5px solid rgba(0,0,0,0.06); }
+    .summary-compact-table { width:100%; border-collapse:collapse; font-size:11px; }
+    .summary-compact-table td { padding:3px 8px; border-bottom:0.5px solid rgba(0,0,0,0.04); }
+    .summary-compact-table tr:last-child td { border-bottom:none; }
+    .summary-compact-table td:first-child { font-weight:500; color:#555; width:44px; }
+    .summary-compact-table td:nth-child(2) { color:#333; }
+    .summary-compact-table td:nth-child(3) { text-align:right; color:#888; width:36px; }
+    .summary-compact-table td:nth-child(4) { text-align:right; width:80px; }
+    @media print { body { padding: 8px; } .summary-grid { gap: 8px; } }
   </style>
 </head>
 <body>
@@ -51,6 +66,7 @@
   <div class="dataset-tabs">
     <div class="dataset-tab active" onclick="switchDataset('frozen')">Frozen</div>
     <div class="dataset-tab" onclick="switchDataset('packaging')">Packaging</div>
+    <div class="dataset-tab" onclick="switchDataset('summary')">Summary</div>
   </div>
 
   <div class="dataset-view active" id="ds-frozen">
@@ -79,6 +95,10 @@
     <div class="section-view" id="packaging-oos"></div>
     <div class="section-view" id="packaging-critical"></div>
     <div class="section-view" id="packaging-atrisk"></div>
+  </div>
+
+  <div class="dataset-view" id="ds-summary">
+    <div class="summary-grid" id="summary-content"></div>
   </div>
 
   <script>
@@ -126,10 +146,11 @@
     function switchDataset(ds) {
       currentDataset = ds;
       document.querySelectorAll('.dataset-tab').forEach((t,i) => {
-        t.classList.toggle('active', ['frozen','packaging'][i]===ds);
+        t.classList.toggle('active', ['frozen','packaging','summary'][i]===ds);
       });
       document.querySelectorAll('.dataset-view').forEach(v => v.classList.remove('active'));
       document.getElementById('ds-'+ds).classList.add('active');
+      if(ds === 'summary') renderSummary();
     }
 
     function switchTab(ds, tab) {
@@ -177,6 +198,44 @@
 
       html += '</tbody></table></div></div>';
       return html;
+    }
+
+    function renderSummary() {
+      const el = document.getElementById('summary-content');
+
+      function buildSummaryCard(ds, label) {
+        let html = '<div><div class="summary-section-title">' + label + '</div><div class="chart-card">';
+
+        allWeeks[ds].forEach(week => {
+          const rows = allData[ds][week] || [];
+          if (!rows.length) return;
+
+          // Sort: OOS first, then Critical, then At risk, then by WOH asc within each
+          const sorted = [...rows].sort((a, b) => {
+            const rOrder = { 'Out of stock': 0, 'Critical': 1, 'At risk': 2 };
+            const rDiff = (rOrder[a.risk] ?? 3) - (rOrder[b.risk] ?? 3);
+            if (rDiff !== 0) return rDiff;
+            return a.startWOH - b.startWOH;
+          });
+
+          html += '<div class="summary-week-label">Week of ' + week + ' — ' + rows.length + ' item' + (rows.length !== 1 ? 's' : '') + '</div>';
+          html += '<table class="summary-compact-table"><tbody>';
+          sorted.forEach(r => {
+            html += '<tr>';
+            html += '<td>' + r.fc + '</td>';
+            html += '<td>' + r.sku + '</td>';
+            html += '<td>' + r.startWOH.toFixed(1) + '</td>';
+            html += '<td>' + riskBadge(r.risk) + '</td>';
+            html += '</tr>';
+          });
+          html += '</tbody></table>';
+        });
+
+        html += '</div></div>';
+        return html;
+      }
+
+      el.innerHTML = buildSummaryCard('frozen', 'Frozen') + buildSummaryCard('packaging', 'Packaging');
     }
 
     function render(ds) {
