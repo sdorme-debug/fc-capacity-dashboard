@@ -34,11 +34,11 @@
 <body>
   <div class="top-tabs">
     <div class="top-tab" onclick="switchTab('all')">FCST</div>
-<div class="top-tab active" onclick="switchTab('overages')">Overages only</div>
+    <div class="top-tab active" onclick="switchTab('overages')">Overages only</div>
   </div>
   <p class="status" id="status">Loading...</p>
 
-  <div class="section-view active" id="view-all">
+  <div class="section-view" id="view-all">
     <div class="legend">
       <div class="legend-item"><span class="legend-dot" style="background:#eaf3de;border:0.5px solid #639922;"></span>Within capacity</div>
       <div class="legend-item"><span class="legend-dot" style="background:#fcebeb;border:0.5px solid #a32d2d;"></span>Over capacity</div>
@@ -54,6 +54,20 @@
     const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQsnyvOR8MURUnK-cJIoFDfFCYQgObj0WA0wxIRkD86TUURIIUSOj_PKcaBQm3v3Mf1j952QVctK2Py/pub?gid=1276470432&single=true&output=csv';
     const DAY_ORDER = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
     const FC_ORDER = ['EWR','FTW','JAX','MKE','MEM','OAK','RNO','SMF'];
+
+    // Get this Monday's date
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const dayOfWeek = today.getDay();
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+
+    function parseDate(str) {
+      // Handles M/D/YYYY
+      const parts = str.split('/');
+      if (parts.length !== 3) return null;
+      return new Date(parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1]));
+    }
 
     function parseCSV(text) {
       return text.trim().split('\n').map(row => {
@@ -88,7 +102,16 @@
       .then(text => {
         const rows = parseCSV(text);
         const headers = rows[0];
-        const fcstCols = headers.map((h,i) => h.startsWith('FCST_') ? {idx:i, date:h.replace('FCST_','')} : null).filter(Boolean);
+
+        // Get all FCST cols, filter to this Monday forward, take first 5
+        const allFcstCols = headers
+          .map((h,i) => h.startsWith('FCST_') ? {idx:i, date:h.replace('FCST_',''), parsed: parseDate(h.replace('FCST_',''))} : null)
+          .filter(Boolean);
+
+        const fcstCols = allFcstCols
+          .filter(c => c.parsed && c.parsed >= monday)
+          .slice(0, 5);
+
         const lookup = {};
         rows.slice(1).forEach(r => { lookup[r[0]+'_'+r[1]] = {appts:parseInt(r[2])||0, vals:r}; });
 
