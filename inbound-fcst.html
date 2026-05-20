@@ -55,12 +55,12 @@
     const DAY_ORDER = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
     const FC_ORDER = ['EWR','FTW','JAX','MKE','MEM','OAK','RNO','SMF'];
 
-    // Get this Monday's date
+    // Get this week's Sunday (start of current week)
     const today = new Date();
     today.setHours(0,0,0,0);
-    const dayOfWeek = today.getDay();
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    const dayOfWeek = today.getDay(); // 0=Sun
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - dayOfWeek); // back to Sunday
 
     function parseDate(str) {
       // Handles M/D/YYYY
@@ -109,7 +109,7 @@
           .filter(Boolean);
 
         const fcstCols = allFcstCols
-          .filter(c => c.parsed && c.parsed >= monday)
+          .filter(c => c.parsed && c.parsed >= weekStart)
           .slice(0, 5);
 
         const lookup = {};
