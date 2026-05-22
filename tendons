@@ -1,0 +1,790 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tendons Analysis · Demand + Selldown</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;500;600&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --ink:        #1a1815;
+    --paper:      #f6f1e8;
+    --paper-2:    #efe7d7;
+    --rule:       #e2d6bd;
+    --rule-2:     #c9b894;
+    --muted:      #6f6557;
+    --accent:     #b8341c;
+    --accent-2:   #d97a3f;
+    --good:       #2a6b4e;
+    --info:       #4a5f8e;
+    --warn:       #c08a1d;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--paper); color: var(--ink); font-family: "Inter Tight", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .page { max-width: 1180px; margin: 0 auto; padding: 56px 32px 80px; }
+
+  /* Masthead */
+  header.mast { border-bottom: 0.5px solid var(--rule-2); padding-bottom: 24px; margin-bottom: 0; position: relative; }
+  .eyebrow { font-family: "JetBrains Mono", monospace; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+  h1.title { font-family: "Fraunces", serif; font-weight: 600; font-size: clamp(36px, 4.5vw, 56px); line-height: 1.02; margin: 8px 0 6px; letter-spacing: -0.02em; font-variation-settings: "opsz" 144; }
+  h1.title em { font-style: italic; font-variation-settings: "opsz" 96; color: var(--accent); }
+  .sub { font-family: "Fraunces", serif; font-size: 17px; font-style: italic; color: var(--muted); max-width: 760px; line-height: 1.45; }
+  .meta { position: absolute; top: 0; right: 0; font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--muted); text-align: right; }
+  .meta div { margin-bottom: 4px; }
+
+  /* Top-level tabs */
+  .tab-strip { display: flex; gap: 0; border-bottom: 0.5px solid var(--rule-2); margin-bottom: 28px; background: var(--paper); position: sticky; top: 0; z-index: 10; padding-top: 4px; }
+  .tab-btn { font-family: "Fraunces", serif; font-size: 18px; font-weight: 500; padding: 18px 32px 14px; background: transparent; border: none; border-bottom: 2px solid transparent; cursor: pointer; color: var(--muted); letter-spacing: -0.005em; transition: color 0.15s, border-color 0.15s; position: relative; }
+  .tab-btn .tab-num { font-family: "JetBrains Mono", monospace; font-size: 11px; font-weight: 500; letter-spacing: 0.12em; color: var(--muted); margin-right: 10px; opacity: 0.7; }
+  .tab-btn:hover { color: var(--ink); }
+  .tab-btn.active { color: var(--ink); border-bottom-color: var(--accent); }
+  .tab-btn.active .tab-num { color: var(--accent); opacity: 1; }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  /* Section heading */
+  h2.section { font-family: "Fraunces", serif; font-weight: 500; font-size: 28px; letter-spacing: -0.01em; margin: 56px 0 10px; padding-bottom: 8px; border-bottom: 0.5px solid var(--rule); }
+  h2.section:first-of-type { margin-top: 16px; }
+  h2.section .num { font-family: "JetBrains Mono", monospace; font-size: 12px; font-weight: 500; color: var(--muted); margin-right: 14px; letter-spacing: 0.1em; }
+  .lede { font-family: "Fraunces", serif; font-size: 16px; font-style: italic; color: var(--muted); max-width: 700px; line-height: 1.5; margin: 0 0 24px; }
+
+  /* Stat cards (selldown) */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1px; background: var(--rule); border: 0.5px solid var(--rule-2); margin: 24px 0; }
+  .stat { background: var(--paper); padding: 18px 20px; }
+  .stat .label { font-family: "JetBrains Mono", monospace; font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .stat .val { font-family: "Fraunces", serif; font-size: 28px; font-weight: 500; line-height: 1; letter-spacing: -0.01em; }
+  .stat .val .small { font-size: 14px; color: var(--muted); }
+  .stat .delta { font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .stat .delta.good { color: var(--good); }
+  .stat .delta.bad { color: var(--accent); }
+
+  /* Inputs panel (demand) */
+  .inputs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0; background: var(--rule); border: 0.5px solid var(--rule-2); margin: 20px 0; }
+  .input-card { background: var(--paper); padding: 18px 20px; border-right: 0.5px solid var(--rule); border-bottom: 0.5px solid var(--rule); }
+  .input-card .label { font-family: "JetBrains Mono", monospace; font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+  .input-card input[type="number"] { font-family: "JetBrains Mono", monospace; font-size: 22px; font-weight: 500; border: none; background: transparent; color: var(--ink); width: 100%; padding: 0; outline: none; border-bottom: 1px dashed var(--rule-2); transition: border-color 0.2s; }
+  .input-card input[type="number"]:focus { border-bottom-color: var(--accent); }
+  .input-card .units { font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .input-card .help { font-family: "Fraunces", serif; font-size: 12px; font-style: italic; color: var(--muted); margin-top: 8px; line-height: 1.4; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; font-family: "Inter Tight", sans-serif; font-size: 13px; }
+  thead tr { border-bottom: 1px solid var(--ink); }
+  thead th { font-family: "JetBrains Mono", monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 500; padding: 10px 8px; text-align: right; }
+  thead th:first-child { text-align: left; }
+  tbody tr { border-bottom: 0.5px solid var(--rule); }
+  tbody td { padding: 9px 8px; text-align: right; font-variant-numeric: tabular-nums; }
+  tbody td:first-child { text-align: left; font-weight: 500; }
+  tfoot tr { border-top: 1px solid var(--ink); }
+  tfoot td { padding: 11px 8px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  tfoot td:first-child { text-align: left; }
+  .num-mono { font-family: "JetBrains Mono", monospace; }
+  .exp { color: var(--accent); font-weight: 500; }
+  .zero { color: var(--muted); opacity: 0.5; }
+  .dep td { background: rgba(184, 52, 28, 0.025); color: var(--muted); }
+  .col-30 { background: rgba(42, 107, 78, 0.04); }
+  .col-60 { background: rgba(74, 95, 142, 0.04); }
+  .col-90 { background: rgba(184, 52, 28, 0.04); }
+  th.col-30 { background: rgba(42, 107, 78, 0.10); }
+  th.col-60 { background: rgba(74, 95, 142, 0.10); }
+  th.col-90 { background: rgba(184, 52, 28, 0.10); }
+
+  /* Toggles */
+  .toggles { margin: 16px 0 20px; }
+  .toggle-label { font-family: "JetBrains Mono", monospace; font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; display: block; }
+  .btn-group { display: inline-flex; border: 0.5px solid var(--rule-2); background: var(--paper-2); padding: 2px; gap: 2px; }
+  .btn { font-family: "JetBrains Mono", monospace; font-size: 12px; font-weight: 500; padding: 7px 14px; background: transparent; color: var(--ink); border: none; cursor: pointer; letter-spacing: 0.04em; transition: all 0.15s ease; }
+  .btn:hover { background: var(--paper); }
+  .btn.active { background: var(--ink); color: var(--paper); }
+  .toggle-row { display: flex; flex-wrap: wrap; gap: 28px; margin-bottom: 16px; }
+
+  /* Chart container */
+  .chart-wrap { background: var(--paper-2); border: 0.5px solid var(--rule-2); padding: 24px; margin: 16px 0 28px; }
+  .chart-wrap h3 { margin: 0 0 14px; font-family: "Fraunces", serif; font-weight: 500; font-size: 17px; }
+  .chart-host { position: relative; width: 100%; height: 360px; }
+  .legend-row { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 10px; font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--muted); }
+  .swatch { display: inline-block; width: 16px; height: 3px; vertical-align: middle; margin-right: 6px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 5px; vertical-align: middle; margin-right: 6px; }
+
+  /* Detail panel */
+  .detail-head { display: flex; justify-content: space-between; align-items: baseline; margin: 6px 0 4px; }
+  .detail-title { font-family: "Fraunces", serif; font-size: 22px; font-weight: 500; }
+  .detail-meta { font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--muted); }
+  .summary-row { font-family: "JetBrains Mono", monospace; font-size: 12px; color: var(--muted); margin-bottom: 12px; display: flex; gap: 22px; flex-wrap: wrap; }
+  .summary-row strong { color: var(--ink); font-weight: 600; }
+
+  /* Summary band (demand outputs) */
+  .summary-band { background: var(--ink); color: var(--paper); padding: 24px 28px; margin: 24px 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 32px; }
+  .summary-band .item .label { font-family: "JetBrains Mono", monospace; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.7; margin-bottom: 8px; }
+  .summary-band .item .val { font-family: "Fraunces", serif; font-size: 26px; font-weight: 500; line-height: 1; }
+  .summary-band .item .val .small { font-size: 13px; opacity: 0.7; }
+  .summary-band .item .delta { font-family: "JetBrains Mono", monospace; font-size: 11px; opacity: 0.7; margin-top: 6px; }
+
+  /* Reset button */
+  .reset-btn { font-family: "JetBrains Mono", monospace; font-size: 11px; padding: 8px 16px; background: transparent; color: var(--accent); border: 0.5px solid var(--accent); cursor: pointer; letter-spacing: 0.08em; text-transform: uppercase; margin-top: 14px; transition: all 0.15s; }
+  .reset-btn:hover { background: var(--accent); color: var(--paper); }
+
+  /* Note */
+  .note { background: var(--paper-2); border-left: 2px solid var(--rule-2); padding: 14px 18px; margin: 18px 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+  .note strong { color: var(--ink); }
+
+  footer { margin-top: 80px; padding-top: 24px; border-top: 0.5px solid var(--rule-2); font-family: "JetBrains Mono", monospace; font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+  footer .pulse { display: inline-block; width: 6px; height: 6px; background: var(--good); border-radius: 50%; margin-right: 6px; vertical-align: middle; animation: pulse 2.4s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  @media print { .toggles, .btn-group, .tab-strip { display: none; } .tab-pane { display: block !important; } .chart-wrap { break-inside: avoid; } }
+  @media (max-width: 720px) {
+    .page { padding: 32px 16px 48px; }
+    .meta { position: static; text-align: left; margin-top: 12px; }
+    table { font-size: 11.5px; }
+    thead th { font-size: 9.5px; padding: 8px 5px; }
+    tbody td { padding: 7px 5px; }
+    .tab-btn { padding: 14px 18px 10px; font-size: 15px; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="mast">
+  <div class="eyebrow">Tendons inventory analysis · TFD</div>
+  <h1 class="title">Demand, meet <em>selldown</em>.</h1>
+  <p class="sub">Two views into the same problem. Tune demand assumptions on the first tab; trace inventory rundown by FC and consumption-buffer scenario on the second.</p>
+  <div class="meta">
+    <div>SKU · TENBFLG / TENBFMD</div>
+    <div>Pool · 198,524 base</div>
+    <div>Analysis · May 2026</div>
+  </div>
+</header>
+
+<div class="tab-strip" role="tablist">
+  <button class="tab-btn active" id="topTab1" onclick="switchTab(1)" role="tab"><span class="tab-num">§ 01</span>Demand model</button>
+  <button class="tab-btn" id="topTab2" onclick="switchTab(2)" role="tab"><span class="tab-num">§ 02</span>Selldown analysis</button>
+</div>
+
+<section class="tab-pane active" id="pane1" role="tabpanel">
+<!-- INPUTS -->
+<h2 class="section"><span class="num">§ 01</span>Inputs</h2>
+<p class="lede">Tune the parameters below. Outputs recalculate immediately.</p>
+
+<div class="inputs-grid">
+  <div class="input-card">
+    <div class="label">Current eligible pool</div>
+    <input type="number" id="inp_pool" value="198524" min="0" step="1000">
+    <div class="units">users (as of 5/10)</div>
+    <div class="help">Subscribers exposed to Tendons on their account page</div>
+  </div>
+  <div class="input-card">
+    <div class="label">Incremental pool addition</div>
+    <input type="number" id="inp_add" value="100000" min="0" step="5000">
+    <div class="units">users (one-time, wk of 6/7)</div>
+    <div class="help">Bulk exposure to additional existing customers</div>
+  </div>
+  <div class="input-card">
+    <div class="label">Weekly conversion rate</div>
+    <input type="number" id="inp_conv" value="0.154" min="0" max="2" step="0.01">
+    <div class="units">% of pool / week</div>
+    <div class="help">Trailing 4-wk weighted (3/15 – 4/5 stable pool ~0.28%)</div>
+  </div>
+  <div class="input-card">
+    <div class="label">Units per order</div>
+    <input type="number" id="inp_upo" value="1.31" min="1" max="5" step="0.01">
+    <div class="units">units / order</div>
+    <div class="help">Avg basket size — most orders are 1, some 2</div>
+  </div>
+  <div class="input-card">
+    <div class="label">LG share</div>
+    <input type="number" id="inp_lg" value="56" min="0" max="100" step="1">
+    <div class="units">% of units</div>
+    <div class="help">SKU mix from trailing 4-wk actuals</div>
+  </div>
+  <div class="input-card">
+    <div class="label">Horizon</div>
+    <input type="number" id="inp_horizon" value="33" min="4" max="60" step="1">
+    <div class="units">weeks forward</div>
+    <div class="help">Through last expiration date (10/27)</div>
+  </div>
+</div>
+
+<button class="reset-btn" onclick="resetInputs()">↺ Reset to defaults</button>
+
+<!-- ACTUAL DATA -->
+<h2 class="section"><span class="num">§ 02</span>Actuals (model calibration)</h2>
+<p class="lede">Eleven weeks of historical eligible pool and order data. The conversion rate is derived from these.</p>
+
+<div style="overflow-x:auto">
+<table>
+  <thead>
+    <tr>
+      <th>Week start</th>
+      <th>Eligible pool</th>
+      <th>Δ pool</th>
+      <th>Orders</th>
+      <th>Units</th>
+      <th>Conversion %</th>
+    </tr>
+  </thead>
+  <tbody id="actualsTbody"></tbody>
+  <tfoot>
+    <tr>
+      <td>Trailing 4-wk (4/19 – 5/10)</td>
+      <td class="num-mono">622,667 wk-users</td>
+      <td></td>
+      <td class="num-mono">958</td>
+      <td class="num-mono">1,243</td>
+      <td class="num-mono">0.154%</td>
+    </tr>
+  </tfoot>
+</table>
+</div>
+
+<div class="chart-wrap">
+  <h3>Actuals: pool vs orders</h3>
+  <div class="legend-row">
+    <span><span class="swatch" style="background:#4a5f8e"></span>Orders (left)</span>
+    <span><span class="swatch" style="background:#b8341c"></span>Eligible pool (right)</span>
+  </div>
+  <div class="chart-host"><canvas id="chartActual"></canvas></div>
+</div>
+
+<!-- OUTPUTS -->
+<h2 class="section"><span class="num">§ 03</span>Outputs (forward projection)</h2>
+<p class="lede">33 weeks of projected weekly demand. Bulk addition lands week of 6/7.</p>
+
+<div class="summary-band" id="summaryBand"></div>
+
+<div class="chart-wrap">
+  <h3>Projected weekly orders & units</h3>
+  <div class="legend-row">
+    <span><span class="swatch" style="background:#4a5f8e"></span>Orders / week</span>
+    <span><span class="swatch" style="background:#b8341c"></span>Units / week (LG + MD)</span>
+  </div>
+  <div class="chart-host"><canvas id="chartProj"></canvas></div>
+</div>
+
+<div style="overflow-x:auto">
+<table>
+  <thead>
+    <tr>
+      <th>Week ending</th>
+      <th>Pool</th>
+      <th>Orders</th>
+      <th>Units</th>
+      <th>LG units</th>
+      <th>MD units</th>
+      <th>Cum. units</th>
+    </tr>
+  </thead>
+  <tbody id="projTbody"></tbody>
+  <tfoot>
+    <tr id="projTotal"></tr>
+  </tfoot>
+</table>
+</div>
+
+<div class="note">
+  <strong>Methodology.</strong> Forward demand = pool × conversion × units-per-order, allocated by SKU share. Pool is held flat at current value for weeks 1–2, then jumps by the incremental addition starting week 3 (week ending 6/7). No churn or saturation effects — each pool member generates orders at a constant weekly rate.
+</div>
+</section>
+
+<section class="tab-pane" id="pane2" role="tabpanel">
+<!-- SECTION 1: Headline -->
+<h2 class="section"><span class="num">§ 01</span>Headline outcomes</h2>
+<p class="lede">At a +100k pool addition, expiry write-off ranges from $82k (30-day buffer) to $151k (90-day buffer). The shorter the customer-consumption window the bank is willing to underwrite, the more inventory flows out as shipments instead of write-offs.</p>
+
+<div class="stats">
+  <div class="stat">
+    <div class="label">Starting inventory</div>
+    <div class="val">$205,058</div>
+    <div class="delta">12,895 units (5,469 LG · 7,426 MD)</div>
+  </div>
+  <div class="stat">
+    <div class="label">30d buffer expiry</div>
+    <div class="val">$82,293</div>
+    <div class="delta">60% of inv shipped</div>
+  </div>
+  <div class="stat">
+    <div class="label">60d buffer expiry</div>
+    <div class="val">$116,768</div>
+    <div class="delta">43% of inv shipped</div>
+  </div>
+  <div class="stat">
+    <div class="label">90d buffer expiry</div>
+    <div class="val">$151,212</div>
+    <div class="delta">26% of inv shipped</div>
+  </div>
+</div>
+
+<!-- SECTION 2: Stockout dates -->
+<h2 class="section"><span class="num">§ 02</span>Inventory stockout dates</h2>
+<p class="lede">Week ending date when each FC reaches zero inventory across both SKUs. Ft. Worth depletes first, Arlington last.</p>
+<div style="overflow-x:auto">
+<table>
+  <thead>
+    <tr><th>FC</th><th class="col-30">30 day buffer</th><th class="col-60">60 day buffer</th><th class="col-90">90 day buffer</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Lyndhurst</td><td class="col-30 num-mono">9 / 12 / 26</td><td class="col-60 num-mono">8 / 22 / 26</td><td class="col-90 num-mono">7 / 25 / 26</td></tr>
+    <tr><td>Sacramento</td><td class="col-30 num-mono">9 / 12 / 26</td><td class="col-60 num-mono">8 / 15 / 26</td><td class="col-90 num-mono">7 / 11 / 26</td></tr>
+    <tr><td>Wisconsin</td><td class="col-30 num-mono">9 / 12 / 26</td><td class="col-60 num-mono">8 / 8 / 26</td><td class="col-90 num-mono">7 / 11 / 26</td></tr>
+    <tr><td>Jacksonville</td><td class="col-30 num-mono">9 / 12 / 26</td><td class="col-60 num-mono">8 / 8 / 26</td><td class="col-90 num-mono">7 / 11 / 26</td></tr>
+    <tr><td>Ft. Worth</td><td class="col-30 num-mono">8 / 22 / 26</td><td class="col-60 num-mono">7 / 18 / 26</td><td class="col-90 num-mono">6 / 20 / 26</td></tr>
+    <tr><td>Arlington</td><td class="col-30 num-mono">8 / 29 / 26</td><td class="col-60 num-mono">8 / 29 / 26</td><td class="col-90 num-mono">8 / 1 / 26</td></tr>
+  </tbody>
+  <tfoot>
+    <tr><td>Network depleted</td><td class="col-30 num-mono">9 / 12 / 26</td><td class="col-60 num-mono">8 / 29 / 26</td><td class="col-90 num-mono">8 / 1 / 26</td></tr>
+  </tfoot>
+</table>
+</div>
+
+<!-- SECTION 3: Expired $ -->
+<h2 class="section"><span class="num">§ 03</span>Expired inventory by FC</h2>
+<p class="lede">Sacramento and Wisconsin carry the heaviest write-off weight across every buffer scenario. Arlington has the lowest exposure but flips from $930 to $8,134 at the 90-day cutoff.</p>
+<div style="overflow-x:auto">
+<table>
+  <thead>
+    <tr><th>FC</th><th class="col-30">30 day buffer</th><th class="col-60">60 day buffer</th><th class="col-90">90 day buffer</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Lyndhurst</td><td class="col-30 num-mono">$8,367</td><td class="col-60 num-mono">$21,736</td><td class="col-90 num-mono">$35,946</td></tr>
+    <tr><td>Sacramento</td><td class="col-30 num-mono">$29,738</td><td class="col-60 num-mono">$35,161</td><td class="col-90 num-mono">$41,939</td></tr>
+    <tr><td>Wisconsin</td><td class="col-30 num-mono">$25,229</td><td class="col-60 num-mono">$27,642</td><td class="col-90 num-mono">$30,024</td></tr>
+    <tr><td>Jacksonville</td><td class="col-30 num-mono">$14,491</td><td class="col-60 num-mono">$16,647</td><td class="col-90 num-mono">$18,372</td></tr>
+    <tr><td>Ft. Worth</td><td class="col-30 num-mono">$3,538</td><td class="col-60 num-mono">$10,904</td><td class="col-90 num-mono">$16,797</td></tr>
+    <tr><td>Arlington</td><td class="col-30 num-mono">$930</td><td class="col-60 num-mono">$4,678</td><td class="col-90 num-mono">$8,134</td></tr>
+  </tbody>
+  <tfoot>
+    <tr><td>Total</td><td class="col-30 num-mono">$82,293</td><td class="col-60 num-mono">$116,768</td><td class="col-90 num-mono">$151,212</td></tr>
+  </tfoot>
+</table>
+</div>
+
+<!-- SECTION 4: Weekly rundown by FC -->
+<h2 class="section"><span class="num">§ 04</span>Weekly rundown</h2>
+<p class="lede">Demand, end-of-week inventory, and expired units week by week. Select a buffer and an FC to drill in.</p>
+
+<div class="toggles">
+  <div class="toggle-row">
+    <div>
+      <span class="toggle-label">Buffer scenario</span>
+      <div class="btn-group" id="bufGroup">
+        <button class="btn active" data-buf="30">30 day</button>
+        <button class="btn" data-buf="60">60 day</button>
+        <button class="btn" data-buf="90">90 day</button>
+      </div>
+    </div>
+    <div>
+      <span class="toggle-label">Fulfillment center</span>
+      <div class="btn-group" id="fcGroup">
+        <button class="btn active" data-fc="EWR">Lyndhurst</button>
+        <button class="btn" data-fc="SMF">Sacramento</button>
+        <button class="btn" data-fc="MKE">Wisconsin</button>
+        <button class="btn" data-fc="JAX">Jacksonville</button>
+        <button class="btn" data-fc="FTW">Ft. Worth</button>
+        <button class="btn" data-fc="MEM">Arlington</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="detail-head">
+  <div class="detail-title" id="detailTitle">Lyndhurst — 30 day buffer</div>
+  <div class="detail-meta">FEFO simulation</div>
+</div>
+<div class="summary-row" id="summaryRow"></div>
+
+<div style="overflow-x:auto">
+  <table id="weeklyTable">
+    <thead>
+      <tr>
+        <th>Week ending</th>
+        <th>Demand (units)</th>
+        <th>Inventory (units)</th>
+        <th>Inventory ($)</th>
+        <th>Expired</th>
+      </tr>
+    </thead>
+    <tbody id="weeklyTbody"></tbody>
+  </table>
+</div>
+
+<!-- SECTION 5: Charts -->
+<h2 class="section"><span class="num">§ 05</span>Visual comparison</h2>
+<p class="lede">Two views: expired dollars by FC, and inventory trajectory over time.</p>
+
+<div class="chart-wrap">
+  <h3>Expired $ by FC across buffer scenarios</h3>
+  <div class="legend-row">
+    <span><span class="swatch" style="background:#2a6b4e"></span>30 day buffer</span>
+    <span><span class="swatch" style="background:#4a5f8e"></span>60 day buffer</span>
+    <span><span class="swatch" style="background:#b8341c"></span>90 day buffer</span>
+  </div>
+  <div class="chart-host"><canvas id="chartExp"></canvas></div>
+</div>
+
+<div class="chart-wrap">
+  <h3>Network inventory over time — selected buffer</h3>
+  <div class="legend-row" id="invLegend"></div>
+  <div class="chart-host"><canvas id="chartInv"></canvas></div>
+</div>
+
+<div class="note">
+  <strong>Methodology.</strong> Pool of 298,524 (198,524 current + 100,000 incremental added week of 6/7) converts at 0.154% per week × 1.31 units per order × 56/44 LG/MD split. Demand allocated to FCs by trailing 4-week order share. FEFO inventory rundown deducts demand from earliest-expiring lots; any lots reaching the (expiration − buffer) date are written off as expired.
+</div>
+</section>
+
+<footer>
+  <div><span class="pulse"></span>Combined view · live recompute</div>
+  <div>Tendons selldown analysis</div>
+  <div>TFD inventory · BigQuery</div>
+</footer>
+
+</div>
+
+<script>
+// Tab switch with lazy chart initialization
+let tab2Initialized = false;
+function switchTab(n) {
+  document.getElementById('topTab1').classList.toggle('active', n === 1);
+  document.getElementById('topTab2').classList.toggle('active', n === 2);
+  document.getElementById('pane1').classList.toggle('active', n === 1);
+  document.getElementById('pane2').classList.toggle('active', n === 2);
+  if (n === 2 && !tab2Initialized) {
+    initSelldown();
+    tab2Initialized = true;
+  }
+  // Resize visible charts after layout change
+  setTimeout(() => {
+    if (window.Chart && Chart.instances) {
+      Object.values(Chart.instances).forEach(c => { try { c.resize(); } catch(e){} });
+    }
+  }, 50);
+}
+
+// ============================================================
+// DEMAND MODEL — runs on load (tab 1 is default)
+// ============================================================
+(function(){
+
+const ACTUALS = [
+  {wk: '3/1',  pool: 23524,  orders: 138, units: 179},
+  {wk: '3/8',  pool: 32095,  orders: 119, units: 156},
+  {wk: '3/15', pool: 53524,  orders: 143, units: 214},
+  {wk: '3/22', pool: 53524,  orders: 173, units: 254},
+  {wk: '3/29', pool: 53524,  orders: 149, units: 226},
+  {wk: '4/5',  pool: 53524,  orders: 142, units: 214},
+  {wk: '4/12', pool: 66381,  orders: 180, units: 258},
+  {wk: '4/19', pool: 98524,  orders: 167, units: 229},
+  {wk: '4/26', pool: 127095, orders: 207, units: 273},
+  {wk: '5/3',  pool: 198524, orders: 246, units: 312},
+  {wk: '5/10', pool: 198524, orders: 338, units: 429},
+];
+
+const DEFAULTS = {
+  pool: 198524, add: 100000, conv: 0.154, upo: 1.31, lg: 56, horizon: 33,
+};
+
+// Forward week-ending dates starting 5/23
+const WEEK_ENDS = (() => {
+  const dates = [];
+  const d = new Date(2026, 4, 23); // 5/23/2026
+  for (let i = 0; i < 60; i++) {
+    dates.push(d.getMonth()+1 + '/' + d.getDate());
+    d.setDate(d.getDate() + 7);
+  }
+  return dates;
+})();
+
+let chartActual, chartProj;
+
+function fmtN(n) { return Math.round(n).toLocaleString(); }
+function fmtPool(n) { return n.toLocaleString(); }
+
+function renderActuals() {
+  const tbody = document.getElementById('actualsTbody');
+  let html = '';
+  ACTUALS.forEach((r, i) => {
+    const prev = i === 0 ? null : ACTUALS[i-1].pool;
+    const delta = prev === null ? '—' : (r.pool - prev > 0 ? '+' + (r.pool - prev).toLocaleString() : '0');
+    const conv = (r.orders / r.pool * 100).toFixed(2);
+    html += `<tr>
+      <td>${r.wk}</td>
+      <td class="num-mono">${r.pool.toLocaleString()}</td>
+      <td class="num-mono" style="color:var(--muted)">${delta}</td>
+      <td class="num-mono">${r.orders}</td>
+      <td class="num-mono">${r.units}</td>
+      <td class="num-mono">${conv}%</td>
+    </tr>`;
+  });
+  tbody.innerHTML = html;
+}
+
+function renderActualChart() {
+  const ctx = document.getElementById('chartActual').getContext('2d');
+  if (chartActual) chartActual.destroy();
+  chartActual = new Chart(ctx, {
+    data: {
+      labels: ACTUALS.map(r => r.wk),
+      datasets: [
+        { type: 'bar', label: 'Orders', data: ACTUALS.map(r => r.orders), backgroundColor: '#4a5f8e', borderWidth: 0, yAxisID: 'y' },
+        { type: 'line', label: 'Pool', data: ACTUALS.map(r => r.pool), borderColor: '#b8341c', backgroundColor: '#b8341c', yAxisID: 'y2', tension: 0.1, pointRadius: 3, borderWidth: 2.5 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { family: 'JetBrains Mono', size: 11 }, color: '#1a1815' } },
+        y: { beginAtZero: true, position: 'left', grid: { color: '#e2d6bd' }, ticks: { font: { family: 'JetBrains Mono', size: 10 }, color: '#6f6557' }, title: { display: true, text: 'Orders', font: { family: 'JetBrains Mono', size: 10 }, color: '#6f6557' } },
+        y2: { beginAtZero: true, position: 'right', grid: { display: false }, ticks: { font: { family: 'JetBrains Mono', size: 10 }, color: '#6f6557', callback: v => (v/1000).toFixed(0) + 'k' }, title: { display: true, text: 'Pool', font: { family: 'JetBrains Mono', size: 10 }, color: '#6f6557' } }
+      }
+    }
+  });
+}
+
+function compute() {
+  const pool0 = parseFloat(document.getElementById('inp_pool').value) || 0;
+  const add = parseFloat(document.getElementById('inp_add').value) || 0;
+  const conv = (parseFloat(document.getElementById('inp_conv').value) || 0) / 100;
+  const upo = parseFloat(document.getElementById('inp_upo').value) || 0;
+  const lgPct = (parseFloat(document.getElementById('inp_lg').value) || 0) / 100;
+  const horizon = Math.min(60, Math.max(1, parseInt(document.getElementById('inp_horizon').value) || 33));
+  const mdPct = 1 - lgPct;
+  
+  const rows = [];
+  let cum = 0;
+  for (let i = 0; i < horizon; i++) {
+    const wkNum = i + 1;
+    const pool = wkNum < 3 ? pool0 : (pool0 + add);
+    const orders = pool * conv;
+    const units = orders * upo;
+    cum += units;
+    rows.push({
+      we: WEEK_ENDS[i],
+      pool: pool,
+      orders: orders,
+      units: units,
+      lg: units * lgPct,
+      md: units * mdPct,
+      cum: cum,
+    });
+  }
+  return { rows, pool0, add, conv, upo, lgPct };
+}
+
+function render() {
+  const { rows, pool0, add } = compute();
+  
+  // Summary band
+  const totalUnits = rows.reduce((s,r) => s+r.units, 0);
+  const totalOrders = rows.reduce((s,r) => s+r.orders, 0);
+  const wk1u = rows[0].units;
+  const wk3u = rows[2] ? rows[2].units : 0;
+  const lastu = rows[rows.length-1].units;
+  
+  document.getElementById('summaryBand').innerHTML = `
+    <div class="item"><div class="label">Total demand (horizon)</div><div class="val">${fmtN(totalUnits)} <span class="small">u</span></div><div class="delta">${fmtN(totalOrders)} orders</div></div>
+    <div class="item"><div class="label">Wk 1 demand</div><div class="val">${fmtN(wk1u)} <span class="small">u</span></div><div class="delta">pre-addition</div></div>
+    <div class="item"><div class="label">Wk 3 demand</div><div class="val">${fmtN(wk3u)} <span class="small">u</span></div><div class="delta">addition lands</div></div>
+    <div class="item"><div class="label">Final wk demand</div><div class="val">${fmtN(lastu)} <span class="small">u</span></div><div class="delta">flat at pool ${(pool0+add).toLocaleString()}</div></div>
+  `;
+  
+  // Table
+  let html = '';
+  rows.forEach(r => {
+    html += `<tr>
+      <td>${r.we}</td>
+      <td class="num-mono">${fmtN(r.pool)}</td>
+      <td class="num-mono">${fmtN(r.orders)}</td>
+      <td class="num-mono">${fmtN(r.units)}</td>
+      <td class="num-mono">${fmtN(r.lg)}</td>
+      <td class="num-mono">${fmtN(r.md)}</td>
+      <td class="num-mono" style="color:var(--muted)">${fmtN(r.cum)}</td>
+    </tr>`;
+  });
+  document.getElementById('projTbody').innerHTML = html;
+  document.getElementById('projTotal').innerHTML = `
+    <td>Total</td>
+    <td class="num-mono"></td>
+    <td class="num-mono">${fmtN(totalOrders)}</td>
+    <td class="num-mono">${fmtN(totalUnits)}</td>
+    <td class="num-mono">${fmtN(rows.reduce((s,r)=>s+r.lg,0))}</td>
+    <td class="num-mono">${fmtN(rows.reduce((s,r)=>s+r.md,0))}</td>
+    <td class="num-mono"></td>
+  `;
+  
+  // Chart
+  const ctx = document.getElementById('chartProj').getContext('2d');
+  if (chartProj) chartProj.destroy();
+  chartProj = new Chart(ctx, {
+    data: {
+      labels: rows.map(r => r.we),
+      datasets: [
+        { type: 'bar', label: 'Orders', data: rows.map(r => Math.round(r.orders)), backgroundColor: '#4a5f8e', borderWidth: 0, yAxisID: 'y' },
+        { type: 'line', label: 'Units', data: rows.map(r => Math.round(r.units)), borderColor: '#b8341c', backgroundColor: '#b8341c', yAxisID: 'y', tension: 0.1, pointRadius: 2, borderWidth: 2.5 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { family: 'JetBrains Mono', size: 9 }, color: '#1a1815', maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } },
+        y: { beginAtZero: true, grid: { color: '#e2d6bd' }, ticks: { font: { family: 'JetBrains Mono', size: 10 }, color: '#6f6557' } }
+      }
+    }
+  });
+}
+
+function resetInputs() {
+  document.getElementById('inp_pool').value = DEFAULTS.pool;
+  document.getElementById('inp_add').value = DEFAULTS.add;
+  document.getElementById('inp_conv').value = DEFAULTS.conv;
+  document.getElementById('inp_upo').value = DEFAULTS.upo;
+  document.getElementById('inp_lg').value = DEFAULTS.lg;
+  document.getElementById('inp_horizon').value = DEFAULTS.horizon;
+  render();
+}
+
+document.querySelectorAll('.input-card input').forEach(el => {
+  el.addEventListener('input', render);
+});
+
+renderActuals();
+renderActualChart();
+render();
+
+})();
+
+// ============================================================
+// SELLDOWN ANALYSIS — runs when tab 2 first opens
+// ============================================================
+function initSelldown() {
+window.WK_DATA = {"30":[{"wk":"2026-05-23","fcs":{"EWR":{"d":145,"i":3721,"$":59199,"e":0},"MEM":{"d":62,"i":821,"$":13063,"e":0},"JAX":{"d":53,"i":1464,"$":23201,"e":0},"FTW":{"d":62,"i":1342,"$":21356,"e":0},"SMF":{"d":57,"i":3114,"$":49570,"e":0},"MKE":{"d":22,"i":2032,"$":32290,"e":0}}},{"wk":"2026-05-30","fcs":{"EWR":{"d":145,"i":3575,"$":56885,"e":0},"MEM":{"d":62,"i":759,"$":12078,"e":0},"JAX":{"d":53,"i":1411,"$":22357,"e":0},"FTW":{"d":62,"i":1281,"$":20376,"e":0},"SMF":{"d":57,"i":3058,"$":48669,"e":0},"MKE":{"d":22,"i":2009,"$":31936,"e":0}}},{"wk":"2026-06-06","fcs":{"EWR":{"d":218,"i":3357,"$":53406,"e":0},"MEM":{"d":93,"i":666,"$":10597,"e":0},"JAX":{"d":80,"i":1331,"$":21088,"e":0},"FTW":{"d":93,"i":1188,"$":18903,"e":0},"SMF":{"d":85,"i":2973,"$":47313,"e":0},"MKE":{"d":33,"i":1976,"$":31403,"e":0}}},{"wk":"2026-06-13","fcs":{"EWR":{"d":218,"i":3138,"$":49927,"e":0},"MEM":{"d":93,"i":574,"$":9117,"e":0},"JAX":{"d":80,"i":1252,"$":19819,"e":0},"FTW":{"d":93,"i":1096,"$":17430,"e":0},"SMF":{"d":85,"i":2887,"$":45957,"e":0},"MKE":{"d":33,"i":1943,"$":30870,"e":0}}},{"wk":"2026-06-20","fcs":{"EWR":{"d":218,"i":2920,"$":46448,"e":0},"MEM":{"d":93,"i":481,"$":7636,"e":0},"JAX":{"d":80,"i":1215,"$":19234,"e":0},"FTW":{"d":93,"i":1003,"$":15957,"e":0},"SMF":{"d":85,"i":2802,"$":44602,"e":0},"MKE":{"d":33,"i":1909,"$":30337,"e":0}}},{"wk":"2026-06-27","fcs":{"EWR":{"d":218,"i":2701,"$":42969,"e":0},"MEM":{"d":93,"i":388,"$":6155,"e":0},"JAX":{"d":80,"i":1188,"$":18803,"e":0},"FTW":{"d":93,"i":911,"$":14484,"e":0},"SMF":{"d":85,"i":2647,"$":42130,"e":69.7237252858055},"MKE":{"d":33,"i":1876,"$":29805,"e":0}}},{"wk":"2026-07-04","fcs":{"EWR":{"d":218,"i":2483,"$":39490,"e":0},"MEM":{"d":93,"i":249,"$":3948,"e":58.14067390123659},"JAX":{"d":80,"i":1161,"$":18372,"e":0},"FTW":{"d":93,"i":818,"$":13010,"e":0},"SMF":{"d":85,"i":2562,"$":40775,"e":0},"MKE":{"d":33,"i":1717,"$":27285,"e":125.52068674607851}}},{"wk":"2026-07-11","fcs":{"EWR":{"d":218,"i":2264,"$":36011,"e":0},"MEM":{"d":93,"i":214,"$":3391,"e":0},"JAX":{"d":80,"i":1133,"$":17940,"e":0},"FTW":{"d":93,"i":726,"$":11537,"e":0},"SMF":{"d":85,"i":2477,"$":39419,"e":0},"MKE":{"d":33,"i":1683,"$":26752,"e":0}}},{"wk":"2026-07-18","fcs":{"EWR":{"d":218,"i":2046,"$":32532,"e":0},"MEM":{"d":93,"i":179,"$":2835,"e":0},"JAX":{"d":80,"i":1106,"$":17509,"e":0},"FTW":{"d":93,"i":633,"$":10064,"e":0},"SMF":{"d":85,"i":2339,"$":37220,"e":52.71267046901594},"MKE":{"d":33,"i":1650,"$":26219,"e":0}}},{"wk":"2026-07-25","fcs":{"EWR":{"d":218,"i":1827,"$":29053,"e":0},"MEM":{"d":93,"i":144,"$":2278,"e":0},"JAX":{"d":80,"i":1079,"$":17078,"e":0},"FTW":{"d":93,"i":540,"$":8591,"e":0},"SMF":{"d":85,"i":2254,"$":35864,"e":0},"MKE":{"d":33,"i":1616,"$":25686,"e":0}}},{"wk":"2026-08-01","fcs":{"EWR":{"d":218,"i":1609,"$":25574,"e":0},"MEM":{"d":93,"i":109,"$":1721,"e":0},"JAX":{"d":80,"i":413,"$":6534,"e":638.8347198893458},"FTW":{"d":93,"i":448,"$":7118,"e":0},"SMF":{"d":85,"i":2169,"$":34509,"e":0},"MKE":{"d":33,"i":1583,"$":25153,"e":0}}},{"wk":"2026-08-08","fcs":{"EWR":{"d":218,"i":1391,"$":22094,"e":0},"MEM":{"d":93,"i":74,"$":1164,"e":0},"JAX":{"d":80,"i":386,"$":6103,"e":0},"FTW":{"d":93,"i":355,"$":5644,"e":0},"SMF":{"d":85,"i":2083,"$":33153,"e":0},"MKE":{"d":33,"i":1549,"$":24621,"e":0}}},{"wk":"2026-08-15","fcs":{"EWR":{"d":218,"i":1172,"$":18615,"e":0},"MEM":{"d":93,"i":38,"$":608,"e":0},"JAX":{"d":80,"i":358,"$":5671,"e":0},"FTW":{"d":93,"i":263,"$":4171,"e":0},"SMF":{"d":85,"i":1971,"$":31373,"e":26.774174555633564},"MKE":{"d":33,"i":1281,"$":20338,"e":234.347888717283}}},{"wk":"2026-08-22","fcs":{"EWR":{"d":218,"i":954,"$":15136,"e":0},"MEM":{"d":93,"i":3,"$":51,"e":0},"JAX":{"d":80,"i":73,"$":1152,"e":258.2751546583925},"FTW":{"d":93,"i":0,"$":0,"e":222.82287762147416},"SMF":{"d":85,"i":1587,"$":25225,"e":299.52111744836},"MKE":{"d":33,"i":237,"$":3798,"e":1026.4308433310728}}},{"wk":"2026-08-29","fcs":{"EWR":{"d":218,"i":735,"$":11657,"e":0},"MEM":{"d":93,"i":0,"$":0,"e":0},"JAX":{"d":80,"i":46,"$":721,"e":0},"FTW":{"d":93,"i":0,"$":0,"e":0},"SMF":{"d":85,"i":1502,"$":23870,"e":0},"MKE":{"d":33,"i":220,"$":3516,"e":0}}},{"wk":"2026-09-05","fcs":{"EWR":{"d":218,"i":7,"$":105,"e":528.5582221760003},"MEM":{"d":93,"i":0,"$":0,"e":0},"JAX":{"d":80,"i":18,"$":289,"e":0},"FTW":{"d":93,"i":0,"$":0,"e":0},"SMF":{"d":85,"i":273,"$":4366,"e":1146.5346007117105},"MKE":{"d":33,"i":202,"$":3234,"e":0}}},{"wk":"2026-09-12","fcs":{"EWR":{"d":218,"i":0,"$":0,"e":0},"MEM":{"d":93,"i":0,"$":0,"e":0},"JAX":{"d":80,"i":0,"$":0,"e":18.275154658392523},"FTW":{"d":93,"i":0,"$":0,"e":0},"SMF":{"d":85,"i":0,"$":0,"e":272.904223489672},"MKE":{"d":33,"i":0,"$":0,"e":202.13553647540203}}}],"60":[{"wk":"2026-05-23","fcs":{"EWR":{"d":145,"i":3721,"$":59199,"e":0},"MEM":{"d":62,"i":821,"$":13063,"e":0},"JAX":{"d":53,"i":1464,"$":23201,"e":0},"FTW":{"d":62,"i":1342,"$":21356,"e":0},"SMF":{"d":57,"i":3114,"$":49570,"e":0},"MKE":{"d":22,"i":2032,"$":32290,"e":0}}},{"wk":"2026-05-30","fcs":{"EWR":{"d":145,"i":3575,"$":56885,"e":0},"MEM":{"d":62,"i":759,"$":12078,"e":0},"JAX":{"d":53,"i":1411,"$":22357,"e":0},"FTW":{"d":62,"i":1281,"$":20376,"e":0},"SMF":{"d":57,"i":2834,"$":45084,"e":224.00552740839478},"MKE":{"d":22,"i":2009,"$":31936,"e":0}}},{"wk":"2026-06-06","fcs":{"EWR":{"d":218,"i":3357,"$":53406,"e":0},"MEM":{"d":93,"i":390,"$":6175,"e":289.17795893466473},"JAX":{"d":80,"i":1331,"$":21088,"e":0},"FTW":{"d":93,"i":1188,"$":18903,"e":0},"SMF":{"d":85,"i":2749,"$":43729,"e":0},"MKE":{"d":33,"i":1722,"$":27364,"e":254.48212178005627}}},{"wk":"2026-06-13","fcs":{"EWR":{"d":218,"i":3138,"$":49927,"e":0},"MEM":{"d":93,"i":355,"$":5618,"e":0},"JAX":{"d":80,"i":1252,"$":19819,"e":0},"FTW":{"d":93,"i":1096,"$":17430,"e":0},"SMF":{"d":85,"i":2663,"$":42373,"e":0},"MKE":{"d":33,"i":1688,"$":26831,"e":0}}},{"wk":"2026-06-20","fcs":{"EWR":{"d":218,"i":2920,"$":46448,"e":0},"MEM":{"d":93,"i":320,"$":5061,"e":0},"JAX":{"d":80,"i":1193,"$":18881,"e":22.284410572560745},"FTW":{"d":93,"i":1003,"$":15957,"e":0},"SMF":{"d":85,"i":2511,"$":39948,"e":66.81397438773874},"MKE":{"d":33,"i":1655,"$":26298,"e":0}}},{"wk":"2026-06-27","fcs":{"EWR":{"d":218,"i":2701,"$":42969,"e":0},"MEM":{"d":93,"i":285,"$":4505,"e":0},"JAX":{"d":80,"i":413,"$":6534,"e":752.7583848861309},"FTW":{"d":93,"i":911,"$":14484,"e":0},"SMF":{"d":85,"i":2338,"$":37193,"e":88.41314918011211},"MKE":{"d":33,"i":1621,"$":25765,"e":0}}},{"wk":"2026-07-04","fcs":{"EWR":{"d":218,"i":2483,"$":39490,"e":0},"MEM":{"d":93,"i":249,"$":3948,"e":0},"JAX":{"d":80,"i":386,"$":6103,"e":0},"FTW":{"d":93,"i":818,"$":13010,"e":0},"SMF":{"d":85,"i":2253,"$":35838,"e":0},"MKE":{"d":33,"i":1588,"$":25232,"e":0}}},{"wk":"2026-07-11","fcs":{"EWR":{"d":218,"i":2264,"$":36011,"e":0},"MEM":{"d":93,"i":214,"$":3391,"e":0},"JAX":{"d":80,"i":358,"$":5671,"e":0},"FTW":{"d":93,"i":726,"$":11537,"e":0},"SMF":{"d":85,"i":2167,"$":34482,"e":0},"MKE":{"d":33,"i":1554,"$":24699,"e":0}}},{"wk":"2026-07-18","fcs":{"EWR":{"d":218,"i":2046,"$":32532,"e":0},"MEM":{"d":93,"i":179,"$":2835,"e":0},"JAX":{"d":80,"i":73,"$":1152,"e":258.2751546583925},"FTW":{"d":93,"i":0,"$":0,"e":685.5859300144341},"SMF":{"d":85,"i":1780,"$":28308,"e":302.34304769105427},"MKE":{"d":33,"i":857,"$":13612,"e":664.1730710987516}}},{"wk":"2026-07-25","fcs":{"EWR":{"d":218,"i":1827,"$":29053,"e":0},"MEM":{"d":93,"i":144,"$":2278,"e":0},"JAX":{"d":80,"i":46,"$":721,"e":0},"FTW":{"d":93,"i":0,"$":0,"e":0},"SMF":{"d":85,"i":1587,"$":25225,"e":107.90422348967198},"MKE":{"d":33,"i":237,"$":3798,"e":601.5288451831252}}},{"wk":"2026-08-01","fcs":{"EWR":{"d":218,"i":662,"$":10553,"e":947.488298526246},"MEM":{"d":93,"i":109,"$":1721,"e":0},"JAX":{"d":80,"i":18,"$":289,"e":0},"FTW":{"d":93,"i":0,"$":0,"e":0},"SMF":{"d":85,"i":510,"$":8117,"e":991.7216593112496},"MKE":{"d":33,"i":220,"$":3516,"e":0}}},{"wk":"2026-08-08","fcs":{"EWR":{"d":218,"i":300,"$":4801,"e":241.51086901999435},"MEM":{"d":93,"i":74,"$":1164,"e":0},"JAX":{"d":80,"i":0,"$":0,"e":18.275154658392523},"FTW":{"d":93,"i":0,"$":0,"e":0},"SMF":{"d":85,"i":231,"$":3693,"e":196.90871791078877},"MKE":{"d":33,"i":0,"$":0,"e":219.7570243169347}}},{"wk":"2026-08-15","fcs":{"EWR":{"d":218,"i":180,"$":2882,"e":0},"MEM":{"d":93,"i":38,"$":608,"e":0},"JAX":{"d":80,"i":0,"$":0,"e":0},"FTW":{"d":93,"i":0,"$":0,"e":0},"SMF":{"d":85,"i":0,"$":0,"e":230.80844697934398},"MKE":{"d":33,"i":0,"$":0,"e":0}}},{"wk":"2026-08-22","fcs":{"EWR":{"d":218,"i":0,"$":0,"e":180.15197104580545},"MEM":{"d":93,"i":3,"$":51,"e":0},"JAX":{"d":80,"i":0,"$":0,"e":0},"FTW":{"d":93,"i":0,"$":0,"e":0},"SMF":{"d":85,"i":0,"$":0,"e":0},"MKE":{"d":33,"i":0,"$":0,"e":0}}},{"wk":"2026-08-29","fcs":{"EWR":{"d":218,"i":0,"$":0,"e":0},"MEM":{"d":93,"i":0,"$":0,"e":3.2299349055402473},"JAX":{"d":80,"i":0,"$":0,"e":0},"FTW":{"d":93,"i":0,"$":0,"e":0},"SMF":{"d":85,"i":0,"$":0,"e":0},"MKE":{"d":33,"i":0,"$":0,"e":0}}}],"90":[{"wk":"2026-05-23","fcs":{"EWR":{"d":145,"i":3721,"$":59199,"e":0},"MEM":{"d":62,"i":455,"$":7207,"e":366},"JAX":{"d":53,"i":1351,"$":21413,"e":113},"FTW":{"d":62,"i":1342,"$":21356,"e":0},"SMF":{"d":57,"i":2683,"$":42674,"e":431},"MKE":{"d":22,"i":1733,"$":27542,"e":299}}},{"wk":"2026-05-30","fcs":{"EWR":{"d":145,"i":3046,"$":48440,"e":529.7006731831457},"MEM":{"d":62,"i":425,"$":6731,"e":0},"JAX":{"d":53,"i":536,"$":8508,"e":761.8838204001495},"FTW":{"d":62,"i":1173,"$":18657,"e":107.42483905365457},"SMF":{"d":57,"i":2380,"$":37873,"e":246.3434977238729},"MKE":{"d":22,"i":1710,"$":27188,"e":0}}},{"wk":"2026-06-06","fcs":{"EWR":{"d":218,"i":2827,"$":44961,"e":0},"MEM":{"d":93,"i":390,"$":6175,"e":0},"JAX":{"d":80,"i":457,"$":7239,"e":0},"FTW":{"d":93,"i":1081,"$":17184,"e":0},"SMF":{"d":85,"i":2295,"$":36517,"e":0},"MKE":{"d":33,"i":1677,"$":26655,"e":0}}},{"wk":"2026-06-13","fcs":{"EWR":{"d":218,"i":2512,"$":39948,"e":96.88725185399629},"MEM":{"d":93,"i":355,"$":5618,"e":0},"JAX":{"d":80,"i":377,"$":5969,"e":0},"FTW":{"d":93,"i":858,"$":13654,"e":129.97942431754765},"SMF":{"d":85,"i":2042,"$":32498,"e":168.2522156346617},"MKE":{"d":33,"i":1340,"$":21259,"e":303.9412792910769}}},{"wk":"2026-06-20","fcs":{"EWR":{"d":218,"i":2293,"$":36469,"e":0},"MEM":{"d":93,"i":318,"$":5031,"e":1.894420920942082},"JAX":{"d":80,"i":73,"$":1152,"e":267.4005901724112},"FTW":{"d":93,"i":0,"$":0,"e":818.3921085575996},"SMF":{"d":85,"i":1587,"$":25225,"e":369.8195017961335},"MKE":{"d":33,"i":237,"$":3798,"e":1084.5985328552301}}},{"wk":"2026-06-27","fcs":{"EWR":{"d":218,"i":2075,"$":32990,"e":0},"MEM":{"d":93,"i":283,"$":4475,"e":0},"JAX":{"d":80,"i":46,"$":721,"e":0},"FTW":{"d":93,"i":0,"$":0,"e":0},"SMF":{"d":85,"i":1502,"$":23870,"e":0},"MKE":{"d":33,"i":220,"$":3516,"e":0}}},{"wk":"2026-07-04","fcs":{"EWR":{"d":218,"i":300,"$":4801,"e":1574.8568974091268},"MEM":{"d":93,"i":248,"$":3918,"e":0},"JAX":{"d":80,"i":18,"$":289,"e":0},"FTW":{"d":93,"i":0,"$":0,"e":0},"SMF":{"d":85,"i":273,"$":4366,"e":1146.5346007117105},"MKE":{"d":33,"i":202,"$":3234,"e":0}}},{"wk":"2026-07-11","fcs":{"EWR":{"d":218,"i":180,"$":2882,"e":0},"MEM":{"d":93,"i":212,"$":3361,"e":0},"JAX":{"d":80,"i":0,"$":0,"e":18.275154658392523},"FTW":{"d":93,"i":0,"$":0,"e":0},"SMF":{"d":85,"i":0,"$":0,"e":272.904223489672},"MKE":{"d":33,"i":0,"$":0,"e":202.13553647540203}}},{"wk":"2026-07-18","fcs":{"EWR":{"d":218,"i":60,"$":964,"e":0},"MEM":{"d":93,"i":177,"$":2805,"e":0},"JAX":{"d":80,"i":0,"$":0,"e":0},"FTW":{"d":93,"i":0,"$":0,"e":0},"SMF":{"d":85,"i":0,"$":0,"e":0},"MKE":{"d":33,"i":0,"$":0,"e":0}}},{"wk":"2026-07-25","fcs":{"EWR":{"d":218,"i":0,"$":0,"e":60.227956568708194},"MEM":{"d":93,"i":142,"$":2248,"e":0},"JAX":{"d":80,"i":0,"$":0,"e":0},"FTW":{"d":93,"i":0,"$":0,"e":0},"SMF":{"d":85,"i":0,"$":0,"e":0},"MKE":{"d":33,"i":0,"$":0,"e":0}}},{"wk":"2026-08-01","fcs":{"EWR":{"d":218,"i":0,"$":0,"e":0},"MEM":{"d":93,"i":0,"$":0,"e":142.00130839075888},"JAX":{"d":80,"i":0,"$":0,"e":0},"FTW":{"d":93,"i":0,"$":0,"e":0},"SMF":{"d":85,"i":0,"$":0,"e":0},"MKE":{"d":33,"i":0,"$":0,"e":0}}}]};
+
+
+(function(){
+  const fcName = {EWR:'Lyndhurst', SMF:'Sacramento', MKE:'Wisconsin', JAX:'Jacksonville', FTW:'Ft. Worth', MEM:'Arlington'};
+  const fcOrder = ['EWR','SMF','MKE','JAX','FTW','MEM'];
+  const expByFc = {
+    30: {EWR:8367, SMF:29738, MKE:25229, JAX:14491, FTW:3538, MEM:930},
+    60: {EWR:21736, SMF:35161, MKE:27642, JAX:16647, FTW:10904, MEM:4678},
+    90: {EWR:35946, SMF:41939, MKE:30024, JAX:18372, FTW:16797, MEM:8134},
+  };
+  let curBuf = 30, curFc = 'EWR';
+
+  // Chart 1: Expired by FC, grouped by buffer
+  const ctxExp = document.getElementById('chartExp').getContext('2d');
+  const expChart = new Chart(ctxExp, {
+    type: 'bar',
+    data: {
+      labels: fcOrder.map(f => fcName[f]),
+      datasets: [
+        { label: '30d', data: fcOrder.map(f => expByFc[30][f]), backgroundColor: '#2a6b4e', borderWidth: 0 },
+        { label: '60d', data: fcOrder.map(f => expByFc[60][f]), backgroundColor: '#4a5f8e', borderWidth: 0 },
+        { label: '90d', data: fcOrder.map(f => expByFc[90][f]), backgroundColor: '#b8341c', borderWidth: 0 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => c.dataset.label + ': $' + c.parsed.y.toLocaleString() } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { family: 'JetBrains Mono', size: 11 }, color: '#1a1815' } },
+        y: { beginAtZero: true, grid: { color: '#e2d6bd' }, ticks: { font: { family: 'JetBrains Mono', size: 10 }, color: '#6f6557', callback: v => '$' + (v/1000).toFixed(0) + 'k' } }
+      }
+    }
+  });
+
+  // Chart 2: Network inventory over time for selected buffer
+  function buildInvChartData(buf) {
+    const rows = window.WK_DATA[String(buf)];
+    return {
+      labels: rows.map(r => { const [y,m,d] = r.wk.split('-'); return parseInt(m)+'/'+parseInt(d); }),
+      datasets: fcOrder.map((fc, i) => ({
+        label: fcName[fc],
+        data: rows.map(r => (r.fcs[fc] && r.fcs[fc]['$']) || 0),
+        backgroundColor: ['#b8341c','#d97a3f','#c08a1d','#2a6b4e','#4a5f8e','#6f6557'][i],
+        borderColor: ['#b8341c','#d97a3f','#c08a1d','#2a6b4e','#4a5f8e','#6f6557'][i],
+        borderWidth: 0,
+        stack: 'inv'
+      }))
+    };
+  }
+  const ctxInv = document.getElementById('chartInv').getContext('2d');
+  const invChart = new Chart(ctxInv, {
+    type: 'bar',
+    data: buildInvChartData(30),
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { mode: 'index', callbacks: { label: c => c.dataset.label + ': $' + c.parsed.y.toLocaleString() } } },
+      scales: {
+        x: { stacked: true, grid: { display: false }, ticks: { font: { family: 'JetBrains Mono', size: 10 }, color: '#6f6557', maxRotation: 0 } },
+        y: { stacked: true, beginAtZero: true, grid: { color: '#e2d6bd' }, ticks: { font: { family: 'JetBrains Mono', size: 10 }, color: '#6f6557', callback: v => '$' + (v/1000).toFixed(0) + 'k' } }
+      }
+    }
+  });
+
+  const invLegend = document.getElementById('invLegend');
+  const colors = ['#b8341c','#d97a3f','#c08a1d','#2a6b4e','#4a5f8e','#6f6557'];
+  invLegend.innerHTML = fcOrder.map((fc,i) => '<span><span class="dot" style="background:'+colors[i]+'"></span>'+fcName[fc]+'</span>').join('');
+
+  // Weekly table render
+  function fmtWk(w) { const [y,m,d] = w.split('-'); return m.replace(/^0/,'')+'/'+d.replace(/^0/,''); }
+  function fmtN(n) { return Math.round(n).toLocaleString(); }
+  function fmtD(n) { return '$' + Math.round(n).toLocaleString(); }
+
+  function render() {
+    document.getElementById('detailTitle').textContent = fcName[curFc] + ' — ' + curBuf + ' day buffer';
+    const rows = window.WK_DATA[String(curBuf)];
+    let totDmd = 0, totExp = 0, finalI = 0, finalD = 0;
+    rows.forEach(r => { const v = r.fcs[curFc] || {d:0,i:0,'$':0,e:0}; totDmd += v.d; totExp += v.e; finalI = v.i; finalD = v['$']; });
+    const expDollar = expByFc[curBuf][curFc];
+    document.getElementById('summaryRow').innerHTML =
+      '<span>Total demand · <strong>'+fmtN(totDmd)+' units</strong></span>' +
+      '<span>Total expired · <strong class="exp">'+fmtN(totExp)+' units · '+fmtD(expDollar)+'</strong></span>' +
+      '<span>Final inventory · <strong>'+fmtN(finalI)+' units / '+fmtD(finalD)+'</strong></span>';
+    const tbody = document.getElementById('weeklyTbody');
+    let html = '';
+    let depleted = false;
+    rows.forEach(r => {
+      const v = r.fcs[curFc] || {d:0,i:0,'$':0,e:0};
+      const isDep = v.i === 0 && depleted;
+      if (v.i === 0) depleted = true;
+      html += '<tr'+(isDep?' class="dep"':'')+'>' +
+              '<td>'+fmtWk(r.wk)+'</td>' +
+              '<td class="num-mono">'+fmtN(v.d)+'</td>' +
+              '<td class="num-mono">'+(v.i>0?fmtN(v.i):'<span class="zero">—</span>')+'</td>' +
+              '<td class="num-mono">'+(v['$']>0?fmtD(v['$']):'<span class="zero">—</span>')+'</td>' +
+              '<td class="num-mono">'+(v.e>0?'<span class="exp">'+fmtN(v.e)+'</span>':'<span class="zero">—</span>')+'</td>' +
+              '</tr>';
+    });
+    tbody.innerHTML = html;
+    invChart.data = buildInvChartData(curBuf);
+    invChart.update();
+  }
+
+  document.querySelectorAll('#bufGroup .btn').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#bufGroup .btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      curBuf = parseInt(b.dataset.buf);
+      render();
+    });
+  });
+  document.querySelectorAll('#fcGroup .btn').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#fcGroup .btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      curFc = b.dataset.fc;
+      render();
+    });
+  });
+  render();
+})();
+
+}
+</script>
+</body>
+</html>
