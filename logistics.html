@@ -138,9 +138,9 @@ const SECTIONS=["Total TLs","Coman PUs","FC Inbounds"];
 
 // ---- view config: which column is the grouping key for each metric ----
 const VIEWS={
-  "Total TLs":[{label:"By FC",key:"c"},{label:"By co-man / supplier",key:"b"}],
-  "Coman PUs":[{label:"By co-man / supplier",key:"c"},{label:"Day of week — by co-man",key:"b",focusKey:"c"}],
-  "FC Inbounds":[{label:"By FC",key:"c"},{label:"Day of week — by FC",key:"b",focusKey:"c"}]
+  "Total TLs":[{label:"By FC",key:"c"},{label:"By co-man / supplier",key:"b"},{label:"Co-man — by FC",key:"b",focusKey:"c",focusLabel:"FC"}],
+  "Coman PUs":[{label:"By co-man / supplier",key:"c"},{label:"Day of week — by co-man",key:"b",focusKey:"c",focusLabel:"Co-man"}],
+  "FC Inbounds":[{label:"By FC",key:"c"},{label:"Day of week — by FC",key:"b",focusKey:"c",focusLabel:"FC"}]
 };
 
 // ---- sample data so every toggle works before real data is pasted ----
@@ -226,7 +226,7 @@ function syncControls(){
   const view=VIEWS[metric][groupIdx];
   if(view.focusKey){
     focusGrp.style.display="";
-    focusLab.textContent = metric==="FC Inbounds" ? "FC" : "Co-man";
+    focusLab.textContent = view.focusLabel || "Focus";
     const ents=[...new Set(DATA.recs.filter(r=>r.section===metric).map(r=>r[view.focusKey]))];
     focusSel.innerHTML="";
     ents.forEach(e=>{const o=document.createElement("option");o.value=e;o.textContent=e;focusSel.appendChild(o);});
