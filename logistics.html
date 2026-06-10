@@ -51,6 +51,11 @@
 
   .board{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
     padding:6px;overflow-x:auto}
+  .msg{padding:54px 28px;text-align:center;font-family:"Space Grotesk";font-size:14px;color:var(--muted);line-height:1.6}
+  .msg.err{color:#b5454a}
+  .msg .spin{display:inline-block;width:15px;height:15px;border:2px solid var(--line);border-top-color:var(--accent);
+    border-radius:50%;animation:sp .7s linear infinite;vertical-align:-3px;margin-right:8px}
+  @keyframes sp{to{transform:rotate(360deg)}}
   .banner{display:flex;align-items:center;gap:6px;background:#FFF7E0;border:1px solid #F0E2A8;color:#7a611c;
     font-family:"Space Grotesk";font-size:12.5px;font-weight:500;padding:10px 14px;border-radius:11px;margin-bottom:14px}
   .banner b{color:#5a4612;font-weight:700}
@@ -103,36 +108,22 @@
       <h1>Inbound Truckload Forecast</h1>
       <p class="sub">Average truckloads per week, rolled to a monthly view. Switch the metric and the breakdown — darker cells run hotter.</p>
     </div>
-    <div class="stamp">Jun 2026 – Jun 2027<br><b id="srcLabel">Sample data loaded</b></div>
+    <div class="stamp">Jun 2026 – Jun 2027<br><b id="srcLabel">Connecting…</b></div>
   </header>
 
-  <div class="controls">
+  <div class="controls" id="controls" style="display:none">
     <div class="seg" id="metricSeg"></div>
     <div class="grp"><label for="groupSel">Break down</label><select id="groupSel"></select></div>
     <div class="grp" id="focusGrp" style="display:none"><label for="focusSel" id="focusLab">FC</label><select id="focusSel"></select></div>
     <div class="legend"><span id="legLo">0</span><span class="bar"></span><span id="legHi">—</span></div>
   </div>
 
-  <div class="banner" id="banner">Preview — these are <b>sample numbers</b>, not from your sheet. Paste your range in “Load your data” below to see real values.</div>
   <div class="board"><div class="grid" id="grid"></div></div>
 
-  <details class="loader" open>
-    <summary>Load your data</summary>
-    <div class="body">
-      <p><b>Live mode (auto-updates):</b> publish the <code>Truckload Forecast</code> tab to the web as CSV, then paste that link into the <code>SHEET_CSV_URL</code> line near the top of this file’s code. The page then loads straight from the sheet and refreshes every few minutes — no copy-paste needed.</p>
-      <p><b>Manual:</b> or just select <code>A1:CG</code> down through your last row in that tab, copy, and paste below. Either way it finds the month columns automatically (the ones dated to the 1st) and reads section / coman / FC from columns A–C.</p>
-      <textarea id="paste" placeholder="Paste the copied range here…"></textarea>
-      <div class="actions">
-        <button class="btn" id="loadBtn">Render my data</button>
-        <span class="status" id="status"><span class="samplenote">Showing sample data — paste yours to replace it</span></span>
-      </div>
-    </div>
-  </details>
 </div>
 <div class="tip" id="tip"></div>
 
 <script>
-const MONTHS=["Jun ’26","Jul ’26","Aug ’26","Sep ’26","Oct ’26","Nov ’26","Dec ’26","Jan ’27","Feb ’27","Mar ’27","Apr ’27","May ’27","Jun ’27"];
 const DAYS=["SUN","MON","TUE","WED","THU","FRI","SAT"];
 const SECTIONS=["Total TLs","Coman PUs","FC Inbounds"];
 
@@ -143,24 +134,7 @@ const VIEWS={
   "FC Inbounds":[{label:"By FC",key:"c"},{label:"Day of week — by FC",key:"b",focusKey:"c",focusLabel:"FC"}]
 };
 
-// ---- sample data so every toggle works before real data is pasted ----
-function sample(){
-  let s=7; const r=()=>{s=(s*1103515245+12345)&0x7fffffff;return s/0x7fffffff;};
-  const wave=(base,amp)=>MONTHS.map((_,i)=>Math.max(0,Math.round(base+amp*Math.sin(i/2+base)+amp*0.5*(r()-0.5))));
-  const recs=[];
-  const FCS=["EWR","FTW","MEM","JAX","MKE","OAK"];
-  const COM=["TX-M","TX-S","IA-I","MN-C","IN-P","IN-S","CO-R"];
-  const SUP=["Corrugate","Insulation","Misc. Dry"];
-  FCS.forEach((fc,fi)=>{COM.concat(SUP).forEach((b,bi)=>{
-    recs.push({section:"Total TLs",b,c:fc,values:wave(2+((fi*3+bi)%7),3)});});});
-  COM.concat(["Insulation"]).forEach((c,ci)=>{DAYS.forEach((d,di)=>{
-    const peak=(di>=1&&di<=5); recs.push({section:"Coman PUs",b:d,c,values:wave(peak?3+((ci+di)%4):0.2,peak?2:0.4)});});});
-  FCS.forEach((fc,fi)=>{DAYS.forEach((d,di)=>{
-    const peak=(di>=1&&di<=5); recs.push({section:"FC Inbounds",b:d,c:fc,values:wave(peak?4+((fi+di)%5):0.2,peak?3:0.4)});});});
-  return {months:MONTHS.slice(),recs};
-}
-
-let DATA=sample();
+let DATA=null;
 let metric="Total TLs", groupIdx=0, focus="";
 
 // ---- color scale ----
@@ -300,24 +274,21 @@ function parseCSV(text){
   return rows.filter(r=>r.some(c=>c!==""));
 }
 
-const statusEl=()=>document.getElementById("status");
+const controls=document.getElementById("controls");
+function showMessage(html,isError){
+  controls.style.display="none";
+  grid.style.gridTemplateColumns="1fr";
+  grid.innerHTML='<div class="msg'+(isError?" err":"")+'">'+html+"</div>";
+}
+
 function applyData(res,sourceLabel){
   DATA=res; metric="Total TLs"; groupIdx=0; focus="";
   document.getElementById("srcLabel").textContent=sourceLabel;
-  document.getElementById("banner").style.display="none";
+  controls.style.display="";
   syncControls(); render();
 }
 
-// manual paste
-document.getElementById("loadBtn").onclick=()=>{
-  const res=parseGrid(splitTSV(document.getElementById("paste").value));
-  if(res.error){statusEl().className="status err";statusEl().textContent=res.error;return;}
-  applyData(res,"Your data");
-  statusEl().className="status ok";
-  statusEl().textContent=`Loaded ${res.recs.length} rows across ${res.months.length} months.`;
-};
-
-// live fetch from the published sheet
+// live fetch from the published sheet — the only data source
 async function loadFromSheet(){
   try{
     const url=SHEET_CSV_URL+(SHEET_CSV_URL.includes("?")?"&":"?")+"_="+Date.now();
@@ -327,15 +298,21 @@ async function loadFromSheet(){
     const now=new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
     applyData(res,"Live from sheet · "+now);
   }catch(e){
-    const b=document.getElementById("banner");
-    b.style.display="";
-    b.innerHTML="Couldn’t reach the published sheet ("+e.message+"). Showing sample data — you can still paste a range below.";
+    if(!DATA){ // only surface the error when there's no good data already on screen
+      document.getElementById("srcLabel").textContent="Not connected";
+      showMessage("Couldn’t load data from the sheet — <b>"+e.message+"</b>.<br>Check that the Truckload Forecast tab is still published to the web. Retrying automatically…",true);
+    }
   }
 }
 
-// startup
-syncControls(); render();
-if(SHEET_CSV_URL){ loadFromSheet(); setInterval(loadFromSheet,5*60*1000); }
+// startup — live only, no placeholder
+if(SHEET_CSV_URL){
+  showMessage('<span class="spin"></span>Loading live data from your sheet…');
+  loadFromSheet();
+  setInterval(loadFromSheet,5*60*1000);
+} else {
+  showMessage("No data source configured.",true);
+}
 </script>
 </body>
 </html>
