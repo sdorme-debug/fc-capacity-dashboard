@@ -23,18 +23,15 @@
   .chart-card { background: #fff; border: 0.5px solid rgba(0,0,0,0.1); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
   .fc-block { margin-bottom: 24px; }
   .fc-header { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: #444; margin-bottom: 10px; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 
   table { width: 100%; border-collapse: collapse; font-size: 12px; }
   th { text-align: right; padding: 8px 10px; color: #888; font-weight: 500; border-bottom: 0.5px solid rgba(0,0,0,0.1); font-size: 11px; }
   th:first-child, td:first-child { text-align: left; }
   td { padding: 8px 10px; border-bottom: 0.5px solid rgba(0,0,0,0.06); font-weight: 500; }
   tr:last-child td { border-bottom: none; }
-  .fc-label { font-weight: 500; color: #444; }
+  .fc-label { font-weight: 500; color: #444; display: flex; align-items: center; gap: 8px; }
   .label-sub { color: #bbb; font-weight: 400; font-size: 10px; margin-left: 4px; }
-
-  table.summary td.name { display: flex; align-items: center; gap: 8px; font-weight: 400; }
-  tr.indent td.name { padding-left: 32px; }
 
   .pos { color: #27ae60; } .warn { color: #e67e22; } .neg { color: #c0392b; }
   .onhand { color: #e67e22; }
@@ -62,17 +59,9 @@
 <script>
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQiDgH4o8p0J8fySDLOMMFujjNVsput_1yPA-dsTCfCtajbD7ozpfZSp_V3qcTJWUQOr4z9BI-fcvaW/pub?gid=535134841&single=true&output=csv';
 
-const FC_ORDER = ['EWR (FC+offsite)', 'EWR', 'MEM', 'FTW', 'RNO', 'SMF', 'JAX', 'MKE'];
-const FC_STYLES = {
-  'EWR (FC+offsite)': '#378ADD',
-  'EWR': '#378ADD',
-  'MEM': '#1D9E75',
-  'FTW': '#7F77DD',
-  'RNO': '#639922',
-  'SMF': '#888780',
-  'JAX': '#BA7517',
-  'MKE': '#D85A30',
-};
+// Palette cycled across whatever base FC names actually show up in the data —
+// no hardcoded FC list, so this survives the source sheet adding/removing rows.
+const PALETTE = ['#378ADD', '#1D9E75', '#7F77DD', '#639922', '#888780', '#BA7517', '#D85A30', '#C24E88', '#4AA8C0'];
 
 function parseCSV(text) {
   return text.trim().split('\n').map(r => {
@@ -95,7 +84,6 @@ function parseVal(v) {
 }
 
 function shortDate(label) {
-  // "6/28/2026" -> "6/28"
   const parts = label.trim().split('/');
   if (parts.length < 2) return label;
   return parts[0] + '/' + parts[1];
@@ -106,10 +94,12 @@ function utilColor(pct) {
   if (pct >= 85) return 'warn';
   return 'pos';
 }
-function remainColor(rem, cap) {
-  if (rem < 0) return 'neg';
-  if (cap && rem / cap < 0.15) return 'warn';
-  return 'pos';
+
+// "EWR (LYN)" -> base "EWR", sub "LYN". "MEM" -> base "MEM", sub "".
+function splitName(name) {
+  const m = name.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
+  if (m) return { base: m[1].trim(), sub: m[2].trim() };
+  return { base: name.trim(), sub: '' };
 }
 
 fetch(CSV_URL)
@@ -124,80 +114,103 @@ fetch(CSV_URL)
     document.getElementById('status').textContent = 'Live from Google Sheets \u00b7 refreshes on page load';
 
     const byType = {};
+    const utilOrder = []; // preserves the row order from the CSV for util specifically
     rows.slice(1).forEach(r => {
       const type = r[0];
+      const fc = r[1];
       if (!byType[type]) byType[type] = {};
-      byType[type][r[1]] = r.slice(2).map(parseVal);
+      byType[type][fc] = r.slice(2).map(parseVal);
+      if (type === 'util' && !utilOrder.includes(fc)) utilOrder.push(fc);
     });
 
     const oh = byType['oh'] || {};
-    const capacity = byType['capacity'] || {};
     const util = byType['util'] || {};
     const remaining = byType['remaining'] || {};
+
+    // Build base-name groups (e.g. all "EWR (...)" variants collapse into base "EWR")
+    // in the order they first appear, and assign each base a stable color.
+    const baseOrder = [];
+    const baseColor = {};
+    utilOrder.forEach(fc => {
+      const { base } = splitName(fc);
+      if (!baseOrder.includes(base)) {
+        baseColor[base] = PALETTE[baseOrder.length % PALETTE.length];
+        baseOrder.push(base);
+      }
+    });
 
     // ---------- Summary table ----------
     const head = document.getElementById('summaryHead');
     head.innerHTML = '<th>FC</th>' + dates.map(d => '<th>' + d + '</th>').join('');
     const body = document.getElementById('summaryBody');
+    body.innerHTML = '';
 
-    FC_ORDER.forEach(fc => {
+    utilOrder.forEach(fc => {
       const vals = util[fc];
       if (!vals) return;
-      const color = FC_STYLES[fc] || '#888';
-      const indent = fc === 'EWR' ? ' style="padding-left:24px;"' : '';
+      const { base, sub } = splitName(fc);
+      const color = baseColor[base] || '#888';
+      const labelHtml = sub
+        ? base + '<span class="label-sub">' + sub + '</span>'
+        : base;
       const cells = vals.map(v => {
         if (v === null) return '<td>\u2014</td>';
         const pct = Math.round(v * 100);
-        return '<td class="' + utilColor(v * 100) + '">' + pct + '%</td>';
+        return '<td class="' + utilColor(pct) + '">' + pct + '%</td>';
       }).join('');
-      body.innerHTML += '<tr><td class="fc-label"><span class="dot" style="background:' + color + '"></span><span' + indent + '>' + fc + '</span></td>' + cells + '</tr>';
+      body.innerHTML += '<tr><td class="fc-label"><span class="dot" style="background:' + color + '"></span>' + labelHtml + '</td>' + cells + '</tr>';
     });
 
     // ---------- Detail view ----------
     const detailEl = document.getElementById('detailView');
 
-    function metricRow(label, sub, valsArr, colorFn) {
-      const cells = valsArr.map(v => {
-        if (v === null) return '<td>\u2014</td>';
+    function metricRow(label, sub, valsArr, colorFn, isPct) {
+      const cells = (valsArr || []).map(v => {
+        if (v === null || v === undefined) return '<td>\u2014</td>';
         const cls = colorFn(v);
-        const display = label === 'On Hand' ? Math.round(v).toLocaleString()
-          : label === 'Utilization %' ? Math.round(v * 100) + '%'
-          : Math.round(v).toLocaleString();
+        const display = isPct ? Math.round(v * 100) + '%' : Math.round(v).toLocaleString();
         return '<td class="' + cls + '">' + display + '</td>';
-      }).join('');
+      }).join('') || dates.map(() => '<td>\u2014</td>').join('');
       return '<tr><td class="fc-label">' + label + (sub ? '<span class="label-sub">' + sub + '</span>' : '') + '</td>' + cells + '</tr>';
     }
 
-    function renderFCBlock(fc) {
-      const color = FC_STYLES[fc] || '#888';
+    // Find every CSV key (across oh/util/remaining) whose base name matches, then
+    // render one row per sub-variant so nothing gets silently dropped or blanked.
+    function renderFCBlock(base) {
+      const color = baseColor[base] || '#888';
+      const variants = utilOrder.filter(fc => splitName(fc).base === base);
       let rowsHtml = '';
-      if (fc === 'EWR') {
-        rowsHtml += metricRow('Utilization %', 'w/ offsite', util['EWR (FC+offsite)'] || [], v => utilColor(v * 100));
-        rowsHtml += metricRow('Net Avail Pallets', 'w/ offsite', remaining['EWR (FC+offsite)'] || [], v => v < 0 ? 'neg' : 'pos');
-        rowsHtml += metricRow('Utilization %', 'FC only', util['EWR'] || [], v => utilColor(v * 100));
-        rowsHtml += metricRow('Net Avail Pallets', 'FC only', remaining['EWR'] || [], v => v < 0 ? 'neg' : 'pos');
-        rowsHtml += metricRow('On Hand', 'FC only', oh['EWR'] || [], () => 'onhand');
-      } else {
-        rowsHtml += metricRow('Utilization %', '', util[fc] || [], v => utilColor(v * 100));
-        rowsHtml += metricRow('Net Avail Pallets', '', remaining[fc] || [], v => v < 0 ? 'neg' : 'pos');
-        rowsHtml += metricRow('On Hand', '', oh[fc] || [], () => 'onhand');
-      }
+
+      variants.forEach(fc => {
+        const { sub } = splitName(fc);
+        rowsHtml += metricRow('Utilization %', sub, util[fc], v => utilColor(v * 100), true);
+      });
+
+      // Remaining Slots may use different sub-labels than Utilization (e.g. "w/ offsite" vs "FC")
+      Object.keys(remaining).filter(fc => splitName(fc).base === base).forEach(fc => {
+        const { sub } = splitName(fc);
+        rowsHtml += metricRow('Net Avail Pallets', sub, remaining[fc], v => v < 0 ? 'neg' : 'pos', false);
+      });
+
+      Object.keys(oh).filter(fc => splitName(fc).base === base).forEach(fc => {
+        const { sub } = splitName(fc);
+        rowsHtml += metricRow('On Hand', sub, oh[fc], () => 'onhand', false);
+      });
+
       return '<div class="fc-block chart-card">' +
-        '<div class="fc-header"><span class="dot" style="background:' + color + '"></span>' + fc + '</div>' +
+        '<div class="fc-header"><span class="dot" style="background:' + color + '"></span>' + base + '</div>' +
         '<table><tr><th></th>' + dates.map(d => '<th>' + d + '</th>').join('') + '</tr>' + rowsHtml + '</table>' +
         '</div>';
     }
 
     function renderDetail(filter) {
-      const fcsToShow = filter === 'ALL'
-        ? ['EWR', 'MEM', 'FTW', 'RNO', 'SMF', 'JAX', 'MKE']
-        : [filter];
-      detailEl.innerHTML = fcsToShow.map(renderFCBlock).join('');
+      const basesToShow = filter === 'ALL' ? baseOrder : [filter];
+      detailEl.innerHTML = basesToShow.map(renderFCBlock).join('');
     }
 
     // ---------- Pills ----------
     const pillsEl = document.getElementById('pills');
-    const pillFCs = [{ key: 'ALL', label: 'All FCs' }, ...['EWR','MEM','FTW','RNO','SMF','JAX','MKE'].map(f => ({ key: f, label: f }))];
+    const pillFCs = [{ key: 'ALL', label: 'All FCs' }, ...baseOrder.map(f => ({ key: f, label: f }))];
     pillsEl.innerHTML = pillFCs.map((f, i) => '<div class="pill' + (i === 0 ? ' active' : '') + '" data-filter="' + f.key + '">' + f.label + '</div>').join('');
     pillsEl.querySelectorAll('.pill').forEach(p => {
       p.addEventListener('click', () => {
