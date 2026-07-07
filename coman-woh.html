@@ -51,6 +51,7 @@
     const CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRgqmVRirhaQ3AKoXv3nRKc1VK7DFlEkUQgfCLBINLi0nYD7zeapoRu7lY4pYP87MarrwiboOXjtzmf/pub?gid=785478594&single=true&output=csv';
     const COMAN_ORDER = ['TX-M','TX-S','IA-I','MN-C','IN-P','IN-S','CO-R'];
     const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const MONTH_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
     const COMAN_COLORS = {
       'TX-M':'#378ADD','TX-S':'#1D9E75','IA-I':'#BA7517',
       'MN-C':'#7F77DD','IN-P':'#D4537E','IN-S':'#D85A30','CO-R':'#639922',
@@ -68,6 +69,25 @@
         cols.push(cur.trim());
         return cols;
       });
+    }
+
+    // Normalizes any month label (e.g. "July 2026", "Jul 2026", "jul  2026")
+    // into a canonical "Mon YYYY" form so the same month is never split
+    // across two different keys just because of formatting differences.
+    function normalizeMonth(m) {
+      if(!m) return m;
+      const parts = m.trim().replace(/\s+/g,' ').split(' ');
+      if(parts.length < 2) return m.trim();
+      const rawName = parts[0];
+      const year = parts[1];
+      const lower = rawName.toLowerCase();
+
+      let idx = MONTH_NAMES.findIndex(n => n.toLowerCase() === lower);
+      if(idx === -1) idx = MONTH_FULL.findIndex(n => n.toLowerCase() === lower);
+      if(idx === -1) idx = MONTH_FULL.findIndex(n => n.toLowerCase().startsWith(lower));
+
+      if(idx === -1) return m.trim(); // fallback: leave as-is if truly unrecognized
+      return MONTH_NAMES[idx] + ' ' + year;
     }
 
     function wohClass(v) {
@@ -101,8 +121,9 @@
       const data = {}, allMonths = [], recipes = new Set(), comans = new Set();
 
       rows.forEach(r => {
-        const [coman, recipe, month, woh] = r;
-        if(!coman||!recipe||!month) return;
+        const [coman, recipe, monthRaw, woh] = r;
+        if(!coman||!recipe||!monthRaw) return;
+        const month = normalizeMonth(monthRaw);
         comans.add(coman);
         recipes.add(recipe);
         if(!allMonths.includes(month)) allMonths.push(month);
