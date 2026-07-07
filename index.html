@@ -25,7 +25,7 @@
     td { padding: 8px 10px; border-bottom: 0.5px solid rgba(0,0,0,0.06); }
     tr:last-child td { border-bottom: none; }
     .fc-label { font-weight: 500; color: #444; }
-    .pos { color: #27ae60; } .warn { color: #e67e22; } .neg { color: #c0392b; }
+    .pos { color: #27ae60; } .yellow { color: #d4ac0d; } .warn { color: #e67e22; } .neg { color: #c0392b; }
   </style>
 </head>
 <body>
@@ -130,12 +130,14 @@ const months = validIndices.map(i => parsedDates[i] ? formatMonthLabel(parsedDat
         document.getElementById('subtitle').textContent = months[0] + ' – ' + months[months.length-1];
         document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
 
-        // Metric cards — peak util per FC
+        // Metric cards — peak util per FC, and keep util values around for the net-pallets table coloring
         const metricsEl = document.getElementById('metrics');
+        const utilByFc = {};
         utilRows.forEach(r => {
           const fc = r[1];
           const allVals = r.slice(2);
           const vals = validIndices.map(i => Math.round(parseFloat(allVals[i]) * 10000) / 100);
+          utilByFc[fc] = vals;
           const maxVal = Math.max(...vals);
           const maxMonth = months[vals.indexOf(maxVal)];
           const color = maxVal >= 90 ? '#c0392b' : maxVal >= 75 ? '#e67e22' : '#27ae60';
@@ -175,14 +177,28 @@ const months = validIndices.map(i => parsedDates[i] ? formatMonthLabel(parsedDat
           }
         });
 
-        // Net pallets table
+        // Net pallets table — colored by that FC/month's utilization %, not raw pallet count
+        // Negative pallets always show red regardless of utilization.
+        function netCellClass(util, netVal) {
+          if (netVal < 0) return 'neg';
+          if (util >= 95) return 'warn';   // orange
+          if (util >= 90) return 'yellow'; // yellow
+          return 'pos';                    // green
+        }
+
         const head = document.getElementById('netHead');
         head.innerHTML = '<th>FC</th>' + months.map(m => '<th>'+m+'</th>').join('');
         const body = document.getElementById('netBody');
         netRows.forEach(r => {
           const fc = r[1];
           const allVals = r.slice(2);
-          const cells = validIndices.map(i => { const n = Math.round(parseFloat(allVals[i])); const cls = n < 0 ? 'neg' : n < 200 ? 'warn' : 'pos'; return '<td class="'+cls+'">'+n.toLocaleString()+'</td>'; }).join('');
+          const fcUtilVals = utilByFc[fc] || [];
+          const cells = validIndices.map((idx, i) => {
+            const n = Math.round(parseFloat(allVals[idx]));
+            const util = fcUtilVals[i] !== undefined ? fcUtilVals[i] : 0;
+            const cls = netCellClass(util, n);
+            return '<td class="'+cls+'">'+n.toLocaleString()+'</td>';
+          }).join('');
           body.innerHTML += '<tr><td class="fc-label">'+fc+'</td>'+cells+'</tr>';
         });
       })
