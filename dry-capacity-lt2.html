@@ -208,8 +208,25 @@ fetch(fetchUrl)
     const util = byType['util'] || {};
     const remaining = byType['remaining'] || {};
 
-    // Skip any series with no real data at all (e.g. a variant that's fully phased out)
-    const activeUtilFCs = utilOrder.filter(fc => (util[fc] || []).some(v => v !== null));
+    // For EWR specifically, the source sheet has one "combined total" row
+    // (identifiable because its raw name has two nested parenthetical groups,
+    // e.g. "EWR (ELZ + LYN) (ELZ + LYN + NEW)") plus several individual
+    // sub-location breakdown rows (LYN, NEW, ELZ) that just append a single
+    // qualifier onto plain "EWR". We only want the combined total surfaced
+    // here — the breakdowns are still in the source sheet if ever needed.
+    function isEwrCombinedTotal(fc) {
+      const parenCount = (fc.match(/\(/g) || []).length;
+      return parenCount >= 2;
+    }
+    function isEwrIndividualBreakdown(fc) {
+      return displayLabel(fc) === 'EWR' && !isEwrCombinedTotal(fc);
+    }
+
+    // Skip any series with no real data at all (e.g. a variant that's fully phased out),
+    // and skip individual EWR sub-location breakdowns in favor of the combined total.
+    const activeUtilFCs = utilOrder
+      .filter(fc => (util[fc] || []).some(v => v !== null))
+      .filter(fc => !isEwrIndividualBreakdown(fc));
 
     const colorFor = {};
     activeUtilFCs.forEach((fc, i) => { colorFor[fc] = PALETTE[i % PALETTE.length]; });
