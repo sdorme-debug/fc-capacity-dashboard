@@ -30,7 +30,8 @@
   th:first-child, td:first-child { text-align: left; }
   td { padding: 8px 10px; border-bottom: 0.5px solid rgba(0,0,0,0.06); font-weight: 500; }
   tr:last-child td { border-bottom: none; }
-  .fc-label { font-weight: 500; color: #444; display: flex; align-items: center; gap: 8px; }
+  td.fc-cell { text-align: left; }
+  .fc-label { font-weight: 500; color: #444; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
   .label-sub { color: #bbb; font-weight: 400; font-size: 10px; margin-left: 4px; }
 
   .pos { color: #27ae60; } .warn { color: #e67e22; } .neg { color: #c0392b; }
@@ -158,7 +159,7 @@ fetch(CSV_URL)
         const pct = Math.round(v * 100);
         return '<td class="' + utilColor(pct) + '">' + pct + '%</td>';
       }).join('');
-      body.innerHTML += '<tr><td class="fc-label"><span class="dot" style="background:' + color + '"></span>' + labelHtml + '</td>' + cells + '</tr>';
+      body.innerHTML += '<tr><td class="fc-cell"><span class="fc-label"><span class="dot" style="background:' + color + '"></span>' + labelHtml + '</span></td>' + cells + '</tr>';
     });
 
     // ---------- Detail view ----------
@@ -171,7 +172,7 @@ fetch(CSV_URL)
         const display = isPct ? Math.round(v * 100) + '%' : Math.round(v).toLocaleString();
         return '<td class="' + cls + '">' + display + '</td>';
       }).join('') || dates.map(() => '<td>\u2014</td>').join('');
-      return '<tr><td class="fc-label">' + label + (sub ? '<span class="label-sub">' + sub + '</span>' : '') + '</td>' + cells + '</tr>';
+      return '<tr><td class="fc-cell"><span class="fc-label">' + label + (sub ? '<span class="label-sub">' + sub + '</span>' : '') + '</span></td>' + cells + '</tr>';
     }
 
     // Find every CSV key (across oh/util/remaining) whose base name matches, then
