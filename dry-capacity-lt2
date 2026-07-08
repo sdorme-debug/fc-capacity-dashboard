@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Projected Dry Capacity Need</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f7f7f6;
+    color: #1a1a1a;
+    padding: 32px 40px;
+  }
+  h1 { font-size: 19px; font-weight: 600; color: #222; margin-bottom: 5px; letter-spacing: -0.01em; }
+  .subtitle { font-size: 13px; color: #8a8a86; margin-bottom: 24px; }
+  .status { font-size: 11px; color: #b3b3af; margin-top: 24px; }
+  .error { color: #c0392b; font-size: 13px; padding: 14px 16px; background: #fdf0ee; border-radius: 10px; }
+
+  .kpi-row { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 28px; }
+  .kpi-card {
+    background: #fff;
+    border: 1px solid #ececec;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    border-radius: 12px;
+    padding: 14px 18px;
+    min-width: 150px;
+    flex: 1 1 150px;
+  }
+  .kpi-label { font-size: 11.5px; color: #9a9a96; margin-bottom: 8px; }
+  .kpi-value { font-size: 22px; font-weight: 700; }
+
+  .section-card {
+    background: #fff;
+    border: 1px solid #ececec;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    border-radius: 14px;
+    padding: 22px 24px;
+    margin-bottom: 18px;
+  }
+  .section-title { font-size: 13.5px; font-weight: 600; color: #333; margin-bottom: 14px; }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #666; }
+  .legend-swatch { width: 16px; height: 2px; border-radius: 1px; display: inline-block; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: fixed; }
+  col.label-col { width: 190px; }
+  th {
+    text-align: right;
+    padding: 0 10px 10px 10px;
+    color: #9a9a96;
+    font-weight: 500;
+    border-bottom: 1px solid #ececec;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+  th:first-child, td:first-child { text-align: left; }
+  td { padding: 11px 10px; border-bottom: 1px solid #f2f2f0; font-weight: 600; text-align: right; }
+  tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #fafaf9; }
+  td.fc-cell { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-weight: 600; color: #333; }
+
+  .pos { color: #1e8e5a; } .warn { color: #d9822b; } .neg { color: #c0392b; }
+</style>
+</head>
+<body>
+
+<h1>Projected dry capacity need</h1>
+<p class="subtitle" id="subtitle">Loading...</p>
+
+<div class="kpi-row" id="kpiRow"></div>
+
+<div class="section-card">
+  <div class="section-title">Utilization % by FC</div>
+  <div class="legend" id="legend"></div>
+  <div id="chartWrap"></div>
+</div>
+
+<div class="section-card">
+  <div class="section-title">Remaining slots by FC</div>
+  <table id="remainingTable">
+    <colgroup id="remainingColgroup"></colgroup>
+    <thead><tr id="remainingHead"></tr></thead>
+    <tbody id="remainingBody"></tbody>
+  </table>
+</div>
+
+<p class="status" id="status"></p>
+
+<script>
+// ============================================================
+// REPLACE THIS with the "Publish to web" CSV link for the
+// MONTHLY export tab (Dashboard Export Dry Capacity) — NOT the
+// same URL as the weekly short-term page. To get it:
+// File -> Share -> Publish to web -> select that tab ->
+// format: Comma-separated values (.csv) -> Publish -> copy link.
+// ============================================================
+const CSV_URL = 'REPLACE_WITH_YOUR_PUBLISHED_MONTHLY_CSV_URL';
+
+const PALETTE = ['#7a7a76', '#378ADD', '#5AA9E6', '#D64545', '#1D9E75', '#7F77DD', '#639922', '#888780', '#BA7517', '#D85A30'];
+
+function parseCSV(text) {
+  return text.trim().split('\n').map(r => {
+    const cols = []; let cur = '', inQ = false;
+    for (let i = 0; i < r.length; i++) {
+      const ch = r[i];
+      if (ch === '"') { inQ = !inQ; }
+      else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+      else { cur += ch; }
+    }
+    cols.push(cur.trim());
+    return cols;
+  });
+}
+
+function parseVal(v) {
+  if (v === undefined || v === null || v === '' || v === '#DIV/0!' || v === '#N/A') return null;
+  const n = parseFloat(v.toString().replace('%', '').replace(/,/g, ''));
+  return isNaN(n) ? null : n;
+}
+
+// Strips only the OUTERMOST trailing parenthetical group, so a name like
+// "EWR (ELZ + LYN) (ELZ + LYN + NEW)" becomes "EWR (ELZ + LYN)" — preserving
+// meaningful embedded qualifiers from the source sheet, while a simple name
+// like "EWR (LYN)" becomes plain "EWR". This keeps each monthly series
+// individually visible (unlike the weekly page, which merges them).
+function displayLabel(name) {
+  const m = name.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
+  return m ? m[1].trim() : name.trim();
+}
+
+function utilColor(pct) {
+  if (pct >= 90) return '#c0392b';
+  if (pct >= 70) return '#d9822b';
+  return '#1e8e5a';
+}
+
+function buildChartSVG(months, series) {
+  const width = 1400, height = 380, padL = 46, padR = 16, padT = 10, padB = 26;
+  const plotW = width - padL - padR, plotH = height - padT - padB;
+  const maxY = 200;
+
+  function xPos(i) { return padL + (months.length <= 1 ? 0 : (i / (months.length - 1)) * plotW); }
+  function yPos(v) {
+    const clamped = Math.max(0, Math.min(maxY, v));
+    return padT + plotH - (clamped / maxY) * plotH;
+  }
+
+  let grid = '';
+  for (let g = 0; g <= maxY; g += 20) {
+    const y = yPos(g);
+    grid += '<line x1="' + padL + '" y1="' + y + '" x2="' + (width - padR) + '" y2="' + y + '" stroke="#eee" stroke-width="1"/>' +
+      '<text x="' + (padL - 8) + '" y="' + (y + 4) + '" font-size="10" fill="#999" text-anchor="end">' + g + '%</text>';
+  }
+
+  let xlabels = '';
+  months.forEach((m, i) => {
+    const x = xPos(i);
+    xlabels += '<text x="' + x + '" y="' + (height - 8) + '" font-size="10" fill="#999" text-anchor="middle">' + m + '</text>';
+  });
+
+  let lines = '';
+  series.forEach((s, idx) => {
+    let d = '';
+    let dots = '';
+    s.values.forEach((v, i) => {
+      if (v === null || v === undefined) return;
+      const x = xPos(i), y = yPos(v);
+      d += (d === '' ? 'M' : 'L') + x + ',' + y + ' ';
+      dots += '<circle cx="' + x + '" cy="' + y + '" r="3" fill="' + s.color + '"/>';
+    });
+    const dash = idx % 3 === 1 ? ' stroke-dasharray="5,4"' : '';
+    lines += '<path d="' + d + '" fill="none" stroke="' + s.color + '" stroke-width="2"' + dash + '/>' + dots;
+  });
+
+  return '<svg viewBox="0 0 ' + width + ' ' + height + '" style="width:100%;height:auto;display:block;">' + grid + xlabels + lines + '</svg>';
+}
+
+function buildColgroup(count) {
+  let html = '<col class="label-col">';
+  for (let i = 0; i < count; i++) html += '<col>';
+  return html;
+}
+
+const fetchUrl = CSV_URL + (CSV_URL.includes('?') ? '&' : '?') + 'cachebust=' + Date.now();
+
+fetch(fetchUrl)
+  .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+  .then(text => {
+    const rows = parseCSV(text);
+    const header = rows[0];
+    const months = header.slice(2); // e.g. "Jul 2026", "Aug 2026", ...
+
+    document.getElementById('subtitle').textContent = months[0] + ' \u2013 ' + months[months.length - 1];
+    document.getElementById('status').textContent = 'Live from Google Sheets \u00b7 refreshes on page load';
+
+    const byType = {};
+    const utilOrder = [];
+    rows.slice(1).forEach(r => {
+      const type = r[0];
+      const fc = r[1];
+      if (!byType[type]) byType[type] = {};
+      byType[type][fc] = r.slice(2).map(parseVal);
+      if (type === 'util' && !utilOrder.includes(fc)) utilOrder.push(fc);
+    });
+
+    const util = byType['util'] || {};
+    const remaining = byType['remaining'] || {};
+
+    // Skip any series with no real data at all (e.g. a variant that's fully phased out)
+    const activeUtilFCs = utilOrder.filter(fc => (util[fc] || []).some(v => v !== null));
+
+    const colorFor = {};
+    activeUtilFCs.forEach((fc, i) => { colorFor[fc] = PALETTE[i % PALETTE.length]; });
+
+    // ---------- KPI cards ----------
+    const kpiRow = document.getElementById('kpiRow');
+    kpiRow.innerHTML = activeUtilFCs.map(fc => {
+      const vals = util[fc];
+      let peak = null, peakIdx = -1;
+      vals.forEach((v, i) => { if (v !== null && (peak === null || v > peak)) { peak = v; peakIdx = i; } });
+      if (peak === null) return '';
+      const label = displayLabel(fc);
+      const color = utilColor(peak);
+      return '<div class="kpi-card">' +
+        '<div class="kpi-label">' + label + ' peak (' + months[peakIdx] + ')</div>' +
+        '<div class="kpi-value" style="color:' + color + '">' + peak.toFixed(1) + '%</div>' +
+        '</div>';
+    }).join('');
+
+    // ---------- Legend + chart ----------
+    const legendEl = document.getElementById('legend');
+    legendEl.innerHTML = activeUtilFCs.map(fc =>
+      '<span class="legend-item"><span class="legend-swatch" style="background:' + colorFor[fc] + '"></span>' + displayLabel(fc) + '</span>'
+    ).join('');
+
+    const series = activeUtilFCs.map(fc => ({ label: displayLabel(fc), color: colorFor[fc], values: util[fc] }));
+    document.getElementById('chartWrap').innerHTML = buildChartSVG(months, series);
+
+    // ---------- Remaining slots table ----------
+    document.getElementById('remainingColgroup').innerHTML = buildColgroup(months.length);
+    document.getElementById('remainingHead').innerHTML = '<th>FC</th>' + months.map(m => '<th>' + m + '</th>').join('');
+
+    const remainingBody = document.getElementById('remainingBody');
+    remainingBody.innerHTML = Object.keys(remaining).map(fc => {
+      const vals = remaining[fc];
+      const cells = vals.map(v => {
+        if (v === null) return '<td>\u2014</td>';
+        const cls = v < 0 ? 'neg' : 'pos';
+        return '<td class="' + cls + '">' + Math.round(v).toLocaleString() + '</td>';
+      }).join('');
+      return '<tr><td class="fc-cell">' + fc + '</td>' + cells + '</tr>';
+    }).join('');
+  })
+  .catch(err => {
+    document.getElementById('kpiRow').innerHTML = '<div class="error">Could not load data: ' + err.message + '</div>';
+  });
+</script>
+
+</body>
+</html>
