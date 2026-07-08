@@ -6,36 +6,61 @@
 <title>FC Short Term Dry Capacity</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f9f8; color: #1a1a1a; padding: 24px; }
-  h1 { font-size: 16px; font-weight: 500; color: #444; margin-bottom: 4px; }
-  .subtitle { font-size: 12px; color: #888; margin-bottom: 4px; }
-  .status { font-size: 11px; color: #aaa; margin-bottom: 20px; }
-  .error { color: #c0392b; font-size: 13px; padding: 12px; background: #fdf0ee; border-radius: 8px; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f7f7f6;
+    color: #1a1a1a;
+    padding: 32px 40px;
+  }
+  h1 { font-size: 19px; font-weight: 600; color: #222; margin-bottom: 5px; letter-spacing: -0.01em; }
+  .subtitle { font-size: 13px; color: #8a8a86; margin-bottom: 2px; }
+  .status { font-size: 11px; color: #b3b3af; margin-bottom: 24px; }
+  .error { color: #c0392b; font-size: 13px; padding: 14px 16px; background: #fdf0ee; border-radius: 10px; }
 
-  .tabs { display: flex; gap: 22px; border-bottom: 0.5px solid rgba(0,0,0,0.1); margin-bottom: 18px; }
-  .tab { font-size: 13px; padding-bottom: 8px; cursor: pointer; color: #888; border-bottom: 2px solid transparent; user-select: none; }
-  .tab.active { color: #1a1a1a; font-weight: 500; border-bottom-color: #1a1a1a; }
+  .tabs { display: flex; gap: 26px; border-bottom: 1px solid #e8e8e5; margin-bottom: 20px; }
+  .tab { font-size: 13.5px; padding-bottom: 10px; cursor: pointer; color: #9a9a96; border-bottom: 2px solid transparent; user-select: none; transition: color 0.15s; }
+  .tab:hover { color: #444; }
+  .tab.active { color: #1a1a1a; font-weight: 600; border-bottom-color: #1a1a1a; }
 
-  .pills { display: flex; gap: 8px; margin-bottom: 22px; flex-wrap: wrap; }
-  .pill { font-size: 12px; padding: 6px 13px; border-radius: 14px; background: #eeeeec; cursor: pointer; user-select: none; color: #444; }
+  .pills { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; }
+  .pill { font-size: 12px; padding: 7px 14px; border-radius: 16px; background: #edede9; cursor: pointer; user-select: none; color: #555; transition: background 0.15s, color 0.15s; }
+  .pill:hover { background: #e2e2dd; }
   .pill.active { background: #1a1a1a; color: #fff; }
 
-  .chart-card { background: #fff; border: 0.5px solid rgba(0,0,0,0.1); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
-  .fc-block { margin-bottom: 24px; }
-  .fc-header { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: #444; margin-bottom: 10px; }
+  .chart-card {
+    background: #fff;
+    border: 1px solid #ececec;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+    border-radius: 14px;
+    padding: 22px 24px;
+    margin-bottom: 18px;
+  }
+  .fc-block { margin-bottom: 18px; }
+  .fc-header { display: flex; align-items: center; gap: 9px; font-size: 13.5px; font-weight: 600; color: #333; margin-bottom: 14px; }
   .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th { text-align: right; padding: 8px 10px; color: #888; font-weight: 500; border-bottom: 0.5px solid rgba(0,0,0,0.1); font-size: 11px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: fixed; }
+  col.label-col { width: 190px; }
+  th {
+    text-align: right;
+    padding: 0 10px 10px 10px;
+    color: #9a9a96;
+    font-weight: 500;
+    border-bottom: 1px solid #ececec;
+    font-size: 11px;
+    white-space: nowrap;
+  }
   th:first-child, td:first-child { text-align: left; }
-  td { padding: 8px 10px; border-bottom: 0.5px solid rgba(0,0,0,0.06); font-weight: 500; }
+  td { padding: 11px 10px; border-bottom: 1px solid #f2f2f0; font-weight: 600; text-align: right; }
   tr:last-child td { border-bottom: none; }
-  td.fc-cell { text-align: left; }
-  .fc-label { font-weight: 500; color: #444; display: flex; align-items: center; gap: 8px; white-space: nowrap; }
-  .label-sub { color: #bbb; font-weight: 400; font-size: 10px; margin-left: 4px; }
+  tbody tr:hover { background: #fafaf9; }
 
-  .pos { color: #27ae60; } .warn { color: #e67e22; } .neg { color: #c0392b; }
-  .onhand { color: #e67e22; }
+  td.fc-cell { overflow: hidden; }
+  .fc-label { font-weight: 600; color: #333; display: flex; align-items: center; gap: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .label-sub { color: #b3b3af; font-weight: 400; font-size: 10.5px; margin-left: 2px; white-space: nowrap; }
+
+  .pos { color: #1e8e5a; } .warn { color: #d9822b; } .neg { color: #c0392b; }
+  .onhand { color: #d9822b; }
 </style>
 </head>
 <body>
@@ -52,7 +77,11 @@
 <div id="pills" class="pills" style="display:none;"></div>
 
 <div class="chart-card" id="summaryCard">
-  <table id="summaryTable"><thead><tr id="summaryHead"></tr></thead><tbody id="summaryBody"></tbody></table>
+  <table id="summaryTable">
+    <colgroup id="summaryColgroup"></colgroup>
+    <thead><tr id="summaryHead"></tr></thead>
+    <tbody id="summaryBody"></tbody>
+  </table>
 </div>
 
 <div id="detailView" style="display:none;"></div>
@@ -96,14 +125,31 @@ function utilColor(pct) {
   return 'pos';
 }
 
-// "EWR (LYN)" -> base "EWR", sub "LYN". "MEM" -> base "MEM", sub "".
+// Strips ALL parenthetical groups down to a clean root name, and uses the
+// LAST (most specific) parenthetical group as the sub-label. This collapses
+// names like "EWR (ELZ + LYN) (ELZ + LYN + NEW)" down to base "EWR" with a
+// single sub-label "ELZ + LYN + NEW", instead of leaving a redundant
+// "(ELZ + LYN)" chunk baked into the main label.
 function splitName(name) {
-  const m = name.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
-  if (m) return { base: m[1].trim(), sub: m[2].trim() };
-  return { base: name.trim(), sub: '' };
+  const firstParen = name.indexOf('(');
+  if (firstParen === -1) return { base: name.trim(), sub: '' };
+  const base = name.slice(0, firstParen).trim();
+  const groups = [...name.matchAll(/\(([^)]*)\)/g)].map(m => m[1].trim()).filter(Boolean);
+  const sub = groups.length ? groups[groups.length - 1] : '';
+  return { base: base || name.trim(), sub };
 }
 
-fetch(CSV_URL)
+// Builds a <colgroup> so every row (header + body, summary + detail) shares
+// identical column widths, regardless of how long any individual label is.
+function buildColgroup(dateCount) {
+  let html = '<col class="label-col">';
+  for (let i = 0; i < dateCount; i++) html += '<col>';
+  return html;
+}
+
+const fetchUrl = CSV_URL + (CSV_URL.includes('?') ? '&' : '?') + 'cachebust=' + Date.now();
+
+fetch(fetchUrl)
   .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
   .then(text => {
     const rows = parseCSV(text);
@@ -113,6 +159,7 @@ fetch(CSV_URL)
 
     document.getElementById('subtitle').textContent = 'Next ' + dates.length + ' weeks \u00b7 ' + dates[0] + ' \u2013 ' + dates[dates.length - 1];
     document.getElementById('status').textContent = 'Live from Google Sheets \u00b7 refreshes on page load';
+    document.getElementById('summaryColgroup').innerHTML = buildColgroup(dates.length);
 
     const byType = {};
     const utilOrder = []; // preserves the row order from the CSV for util specifically
@@ -166,12 +213,12 @@ fetch(CSV_URL)
     const detailEl = document.getElementById('detailView');
 
     function metricRow(label, sub, valsArr, colorFn, isPct) {
-      const cells = (valsArr || []).map(v => {
+      const cells = (valsArr && valsArr.length ? valsArr : dates.map(() => null)).map(v => {
         if (v === null || v === undefined) return '<td>\u2014</td>';
         const cls = colorFn(v);
         const display = isPct ? Math.round(v * 100) + '%' : Math.round(v).toLocaleString();
         return '<td class="' + cls + '">' + display + '</td>';
-      }).join('') || dates.map(() => '<td>\u2014</td>').join('');
+      }).join('');
       return '<tr><td class="fc-cell"><span class="fc-label">' + label + (sub ? '<span class="label-sub">' + sub + '</span>' : '') + '</span></td>' + cells + '</tr>';
     }
 
@@ -200,7 +247,8 @@ fetch(CSV_URL)
 
       return '<div class="fc-block chart-card">' +
         '<div class="fc-header"><span class="dot" style="background:' + color + '"></span>' + base + '</div>' +
-        '<table><tr><th></th>' + dates.map(d => '<th>' + d + '</th>').join('') + '</tr>' + rowsHtml + '</table>' +
+        '<table><colgroup>' + buildColgroup(dates.length) + '</colgroup>' +
+        '<tr><th></th>' + dates.map(d => '<th>' + d + '</th>').join('') + '</tr>' + rowsHtml + '</table>' +
         '</div>';
     }
 
