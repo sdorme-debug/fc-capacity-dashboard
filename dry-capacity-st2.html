@@ -222,25 +222,37 @@ fetch(fetchUrl)
       return '<tr><td class="fc-cell"><span class="fc-label">' + label + (sub ? '<span class="label-sub">' + sub + '</span>' : '') + '</span></td>' + cells + '</tr>';
     }
 
-    // Find every CSV key (across oh/util/remaining) whose base name matches, then
-    // render one row per sub-variant so nothing gets silently dropped or blanked.
+    // For some FCs (currently just EWR) the source sheet has more sub-variant
+    // rows than we want surfaced in Detail — keep just the first/aggregate row
+    // per metric instead of listing every LYN/NEW/ELZ breakdown.
+    const SIMPLE_BASES = ['EWR'];
+
     function renderFCBlock(base) {
       const color = baseColor[base] || '#888';
-      const variants = utilOrder.filter(fc => splitName(fc).base === base);
+      let variants = utilOrder.filter(fc => splitName(fc).base === base);
+      let remainingKeys = Object.keys(remaining).filter(fc => splitName(fc).base === base);
+      let ohKeys = Object.keys(oh).filter(fc => splitName(fc).base === base);
+
+      if (SIMPLE_BASES.includes(base)) {
+        variants = variants.slice(0, 1);
+        remainingKeys = remainingKeys.slice(0, 1);
+        ohKeys = ohKeys.slice(0, 1);
+      }
+
       let rowsHtml = '';
 
       variants.forEach(fc => {
         const { sub } = splitName(fc);
-        rowsHtml += metricRow('Utilization %', sub, util[fc], v => utilColor(v * 100), true);
+        rowsHtml += metricRow('Utilization %', SIMPLE_BASES.includes(base) ? '' : sub, util[fc], v => utilColor(v * 100), true);
       });
 
       // Remaining Slots may use different sub-labels than Utilization (e.g. "w/ offsite" vs "FC")
-      Object.keys(remaining).filter(fc => splitName(fc).base === base).forEach(fc => {
+      remainingKeys.forEach(fc => {
         const { sub } = splitName(fc);
-        rowsHtml += metricRow('Net Avail Pallets', sub, remaining[fc], v => v < 0 ? 'neg' : 'pos', false);
+        rowsHtml += metricRow('Net Avail Pallets', SIMPLE_BASES.includes(base) ? '' : sub, remaining[fc], v => v < 0 ? 'neg' : 'pos', false);
       });
 
-      Object.keys(oh).filter(fc => splitName(fc).base === base).forEach(fc => {
+      ohKeys.forEach(fc => {
         const { sub } = splitName(fc);
         rowsHtml += metricRow('On Hand', sub, oh[fc], () => 'onhand', false);
       });
