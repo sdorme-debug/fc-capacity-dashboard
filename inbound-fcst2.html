@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FC Available Appointments — Overages</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f9f9f8; color: #1a1a1a; padding: 24px; }
+  .top-tabs { display:flex; gap:0; margin-bottom:20px; border-bottom:0.5px solid #ddd; }
+  .top-tab { font-size:12px; padding:8px 16px; cursor:pointer; color:#888; border-bottom:2px solid transparent; margin-bottom:-0.5px; transition:all 0.15s; }
+  .top-tab.active { color:#1a1a1a; border-bottom-color:#1a1a1a; font-weight:500; }
+  .status { font-size:11px; color:#aaa; margin-bottom:12px; }
+  .section-view { display:none; }
+  .section-view.active { display:block; }
+  .chart-card { background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:12px; padding:20px; margin-bottom:16px; overflow-x:auto; }
+  table { border-collapse:collapse; font-size:11px; width:100%; table-layout:fixed; }
+  th { padding:6px 10px; color:#888; font-weight:500; text-align:center; border-bottom:0.5px solid rgba(0,0,0,0.1); white-space:nowrap; font-size:11px; }
+  th.left { text-align:left; width:70px; }
+  td { padding:4px 10px; text-align:center; border-bottom:0.5px solid rgba(0,0,0,0.04); }
+  td.week-cell { font-weight:500; font-size:11px; color:#444; text-align:left; }
+  td.day-cell { color:#888; font-size:11px; text-align:left; }
+  td.date-cell { color:#aaa; font-size:11px; }
+  .week-divider td { border-top:1px solid rgba(0,0,0,0.08); }
+  .cell-ok { background:#eaf3de; color:#3b6d11; border-radius:4px; padding:2px 8px; display:inline-block; min-width:28px; font-size:11px; }
+  .cell-over { background:#fcebeb; color:#a32d2d; border-radius:4px; padding:2px 8px; display:inline-block; min-width:28px; font-size:11px; font-weight:500; }
+  .cell-zero { color:#ddd; font-size:11px; }
+  .legend { display:flex; gap:16px; margin-bottom:10px; font-size:11px; color:#888; }
+  .legend-item { display:flex; align-items:center; gap:5px; }
+  .legend-dot { width:10px; height:10px; border-radius:2px; }
+  .no-overages { font-size:13px; color:#888; padding:20px; text-align:center; }
+  .paste-card { background:#fff; border:0.5px solid rgba(0,0,0,0.1); border-radius:12px; padding:16px; margin-bottom:20px; }
+  .paste-card summary { font-size:12px; color:#888; cursor:pointer; }
+  textarea { width:100%; height:160px; margin-top:10px; font-family: ui-monospace, monospace; font-size:11px; padding:8px; border:0.5px solid rgba(0,0,0,0.15); border-radius:8px; resize:vertical; }
+  .load-btn { margin-top:10px; font-size:12px; padding:6px 14px; border-radius:6px; border:0.5px solid rgba(0,0,0,0.15); background:#1a1a1a; color:#fff; cursor:pointer; }
+  .load-btn:hover { opacity:0.85; }
+  .hint { font-size:11px; color:#aaa; margin-top:6px; }
+</style>
+</head>
+<body>
+
+  <details class="paste-card">
+    <summary>Manual override — paste data instead of using the live sheet</summary>
+    <textarea id="pasteArea">DOW	Date	EWR	MEM	FTW	RNO	SMF	JAX	MKE	OAK
+Sunday	7/12	-1	0	1	2	4	-1	0	0
+Monday	7/13	4	5	1	3	8	12	4	5
+Tuesday	7/14	9	2	2	3	6	12	2	6
+Wednesday	7/15	3	1	0	4	7	3	0	9
+Thursday	7/16	-1	3	1	2	8	7	1	5
+Friday	7/17	0	2	1	0	6	8	2	1
+Saturday	7/18	0	0	0	0	0	0	0	0
+Sunday	7/19	0	0	2	3	4	0	0	0
+Monday	7/20	4	2	1	2	-1	9	1	2
+Tuesday	7/21	8	1	3	0	1	11	2	5
+Wednesday	7/22	0	1	0	1	1	3	0	9
+Thursday	7/23	0	1	3	3	5	5	2	2
+Friday	7/24	2	2	2	0	6	6	0	1
+Saturday	7/25	0	0	0	0	0	0	0	0
+Sunday	7/26	0	0	1	3	2	0	0	0
+Monday	7/27	6	2	0	3	3	8	1	0
+Tuesday	7/28	2	1	2	2	6	12	3	6
+Wednesday	7/29	0	0	1	3	5	5	1	9
+Thursday	7/30	0	0	3	2	10	6	2	1
+Friday	7/31	1	0	5	0	2	9	2	4
+Saturday	8/1	0	0	0	0	0	0	0	0
+Sunday	8/2	0	0	4	2	3	0	0	0
+Monday	8/3	-3	2	1	-1	5	8	0	0
+Tuesday	8/4	7	0	4	4	10	12	2	6
+Wednesday	8/5	10	0	0	4	10	5	1	9
+Thursday	8/6	10	0	3	3	10	8	2	0
+Friday	8/7	11	0	3	0	6	9	3	0
+Saturday	8/8	0	0	0	0	0	0	0	0</textarea>
+    <button class="load-btn" onclick="loadPastedData()">Load pasted data</button>
+    <p class="hint">Paste rows with header: DOW, Date, then one column per FC. Negative values = over capacity (too many POs vs. available appointments). Group/subtotal rows (where Date is blank or "-") are skipped automatically.</p>
+  </details>
+
+  <div class="top-tabs">
+    <div class="top-tab" onclick="switchTab('all')">All</div>
+    <div class="top-tab active" onclick="switchTab('overages')">Overages only</div>
+  </div>
+  <p class="status" id="status">Loaded from pasted data</p>
+
+  <div class="section-view" id="view-all">
+    <div class="legend">
+      <div class="legend-item"><span class="legend-dot" style="background:#eaf3de;border:0.5px solid #639922;"></span>Appointments available</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#fcebeb;border:0.5px solid #a32d2d;"></span>Over capacity</div>
+    </div>
+    <div class="chart-card" id="table-all"></div>
+  </div>
+
+  <div class="section-view active" id="view-overages">
+    <div class="chart-card" id="table-overages"></div>
+  </div>
+
+<script>
+  const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vT2-mLM5q4aU55kPPyMaLKp0mRUhJYqNLHZDX_fxgrJjTumlwjPI21238mQitLGRhDrx-0gtpl4pP6j/pub?gid=1445026110&single=true&output=csv';
+
+  function parseRows(text) {
+    // Handles tab-separated (manual paste) or comma-separated (CSV fetch, quote-aware)
+    return text.trim().split('\n').map(line => {
+      if (line.includes('\t')) {
+        return line.split('\t').map(c => c.trim());
+      }
+      const cols = []; let cur = '', inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') { inQ = !inQ; }
+        else if (ch === ',' && !inQ) { cols.push(cur.trim()); cur = ''; }
+        else { cur += ch; }
+      }
+      cols.push(cur.trim());
+      return cols.map(c => c.replace(/^"|"$/g, ''));
+    });
+  }
+
+  function parseDate(str) {
+    // M/D format (assume current/next year context not needed for grouping by week)
+    const parts = str.split('/');
+    if (parts.length < 2) return null;
+    const now = new Date();
+    let year = now.getFullYear();
+    const m = parseInt(parts[0]) - 1;
+    const d = parseInt(parts[1]);
+    let dt = new Date(year, m, d);
+    return dt;
+  }
+
+  function weekStartLabel(date) {
+    const d = new Date(date);
+    const dow = d.getDay(); // 0 = Sunday
+    d.setDate(d.getDate() - dow);
+    return (d.getMonth()+1) + '/' + d.getDate();
+  }
+
+  function cellHTML(val) {
+    if (val === null) return '<span class="cell-zero">—</span>';
+    if (val === 0) return '<span class="cell-zero">0</span>';
+    if (val < 0) return '<span class="cell-over">'+val+' <small>(over '+Math.abs(val)+')</small></span>';
+    return '<span class="cell-ok">'+val+'</span>';
+  }
+
+  let parsedData = null; // { fcs: [...], rows: [{week, day, date, vals: {fc: val}}] }
+
+  function loadFromRows(rows) {
+    let headerIdx = rows.findIndex(r => r.some(c => c.toLowerCase() === 'date'));
+    if (headerIdx === -1) { headerIdx = 0; }
+    const header = rows[headerIdx];
+    const dayIdx = header.findIndex(c => c.toLowerCase() === 'dow' || c.toLowerCase() === 'day');
+    const dateIdx = header.findIndex(c => c.toLowerCase() === 'date');
+    const fcCols = header
+      .map((h, i) => (i !== dayIdx && i !== dateIdx && h) ? { name: h, idx: i } : null)
+      .filter(Boolean);
+
+    const dataRows = [];
+    rows.slice(headerIdx + 1).forEach(r => {
+      const dateStr = r[dateIdx];
+      if (!dateStr || dateStr === '-') return; // skip group/subtotal rows
+      const dayStr = dayIdx > -1 ? r[dayIdx] : '';
+      const dt = parseDate(dateStr);
+      const vals = {};
+      fcCols.forEach(c => {
+        const raw = r[c.idx];
+        vals[c.name] = (raw === '' || raw === undefined) ? null : (parseFloat(raw) || 0);
+      });
+      dataRows.push({ day: dayStr, date: dateStr, week: dt ? weekStartLabel(dt) : '', vals });
+    });
+
+    parsedData = { fcs: fcCols.map(c => c.name), rows: dataRows };
+  }
+
+  function loadPastedData() {
+    const text = document.getElementById('pasteArea').value;
+    loadFromRows(parseRows(text));
+    document.getElementById('status').textContent = 'Loaded ' + parsedData.rows.length + ' rows from pasted data · ' + parsedData.fcs.length + ' FCs (manual override)';
+    render();
+  }
+
+  function fetchLiveData() {
+    document.getElementById('status').textContent = 'Loading from Google Sheets...';
+    fetch(CSV_URL)
+      .then(r => {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      })
+      .then(text => {
+        loadFromRows(parseRows(text));
+        document.getElementById('status').textContent = 'Live from Google Sheets · refreshes on page load';
+        render();
+      })
+      .catch(err => {
+        document.getElementById('status').textContent = 'Could not load live sheet (' + err.message + ') — showing pasted/manual data instead.';
+        loadPastedData();
+      });
+  }
+
+  function switchTab(tab) {
+    document.querySelectorAll('.top-tab').forEach((t,i) => t.classList.toggle('active',(i===0&&tab==='all')||(i===1&&tab==='overages')));
+    document.getElementById('view-all').classList.toggle('active', tab==='all');
+    document.getElementById('view-overages').classList.toggle('active', tab==='overages');
+  }
+
+  function buildTable(overagesOnly) {
+    if (!parsedData || parsedData.rows.length === 0) {
+      return '<p class="no-overages">No data loaded yet.</p>';
+    }
+    const { fcs, rows } = parsedData;
+    let html = '<table><thead><tr><th class="left">Week of</th><th class="left" style="width:80px;">Day</th><th style="width:55px;">Date</th>';
+    fcs.forEach(fc => { html += '<th>'+fc+'</th>'; });
+    html += '</tr></thead><tbody>';
+
+    let hasAny = false;
+    let lastWeek = null;
+    rows.forEach(row => {
+      const rowHasOverage = fcs.some(fc => (row.vals[fc] ?? 0) < 0);
+      if (overagesOnly && !rowHasOverage) return;
+      hasAny = true;
+      const isNewWeek = row.week !== lastWeek;
+      lastWeek = row.week;
+      html += '<tr'+(isNewWeek?' class="week-divider"':'')+'>';
+      html += '<td class="week-cell">'+(isNewWeek ? row.week : '')+'</td>';
+      html += '<td class="day-cell">'+row.day+'</td>';
+      html += '<td class="date-cell">'+row.date+'</td>';
+      fcs.forEach(fc => { html += '<td>'+cellHTML(row.vals[fc])+'</td>'; });
+      html += '</tr>';
+    });
+
+    html += '</tbody></table>';
+    return hasAny ? html : '<p class="no-overages">No overages found in loaded data.</p>';
+  }
+
+  function render() {
+    document.getElementById('table-all').innerHTML = buildTable(false);
+    document.getElementById('table-overages').innerHTML = buildTable(true);
+  }
+
+  // attempt live fetch on load; falls back to pasted/manual data on failure
+  fetchLiveData();
+</script>
+</body>
+</html>
