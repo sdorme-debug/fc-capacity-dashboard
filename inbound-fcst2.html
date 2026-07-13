@@ -41,35 +41,40 @@
 
   <details class="paste-card">
     <summary>Manual override — paste data instead of using the live sheet</summary>
-    <textarea id="pasteArea">DOW	Date	EWR	MEM	FTW	RNO	SMF	JAX	MKE	OAK
-Sunday	7/12	-1	0	1	2	4	-1	0	0
-Monday	7/13	4	5	1	3	8	12	4	5
-Tuesday	7/14	9	2	2	3	6	12	2	6
-Wednesday	7/15	3	1	0	4	7	3	0	9
-Thursday	7/16	-1	3	1	2	8	7	1	5
-Friday	7/17	0	2	1	0	6	8	2	1
-Saturday	7/18	0	0	0	0	0	0	0	0
-Sunday	7/19	0	0	2	3	4	0	0	0
-Monday	7/20	4	2	1	2	-1	9	1	2
-Tuesday	7/21	8	1	3	0	1	11	2	5
-Wednesday	7/22	0	1	0	1	1	3	0	9
-Thursday	7/23	0	1	3	3	5	5	2	2
-Friday	7/24	2	2	2	0	6	6	0	1
-Saturday	7/25	0	0	0	0	0	0	0	0
-Sunday	7/26	0	0	1	3	2	0	0	0
-Monday	7/27	6	2	0	3	3	8	1	0
-Tuesday	7/28	2	1	2	2	6	12	3	6
-Wednesday	7/29	0	0	1	3	5	5	1	9
-Thursday	7/30	0	0	3	2	10	6	2	1
-Friday	7/31	1	0	5	0	2	9	2	4
-Saturday	8/1	0	0	0	0	0	0	0	0
-Sunday	8/2	0	0	4	2	3	0	0	0
-Monday	8/3	-3	2	1	-1	5	8	0	0
-Tuesday	8/4	7	0	4	4	10	12	2	6
-Wednesday	8/5	10	0	0	4	10	5	1	9
-Thursday	8/6	10	0	3	3	10	8	2	0
-Friday	8/7	11	0	3	0	6	9	3	0
-Saturday	8/8	0	0	0	0	0	0	0	0</textarea>
+    <textarea id="pasteArea">	DOW	Date	Available Appointments							
+			EWR	MEM	FTW	RNO	SMF	JAX	MKE	OAK
+7/12	-	-	14	13	6	14	39	41	9	26
+7/12/2026	Sunday	7/12	-1	0	1	2	4	-1	0	0
+	Monday	7/13	4	5	1	3	8	12	4	5
+	Tuesday	7/14	9	2	2	3	6	12	2	6
+	Wednesday	7/15	3	1	0	4	7	3	0	9
+	Thursday	7/16	-1	3	1	2	8	7	1	5
+	Friday	7/17	0	2	1	0	6	8	2	1
+	Saturday	7/18	0	0	0	0	0	0	0	0
+7/19	-	-	14	7	11	9	16	34	5	19
+7/19	Sunday	7/19	0	0	2	3	4	0	0	0
+	Monday	7/20	4	2	1	2	-1	9	1	2
+	Tuesday	7/21	8	1	3	0	1	11	2	5
+	Wednesday	7/22	0	1	0	1	1	3	0	9
+	Thursday	7/23	0	1	3	3	5	5	2	2
+	Friday	7/24	2	2	2	0	6	6	0	1
+	Saturday	7/25	0	0	0	0	0	0	0	0
+7/26	-	-	8	2	11	12	27	39	8	20
+7/26	Sunday	7/26	0	0	1	3	2	0	0	0
+	Monday	7/27	5	1	0	2	3	8	0	0
+	Tuesday	7/28	2	1	1	2	5	11	3	6
+	Wednesday	7/29	0	0	1	3	5	5	1	9
+	Thursday	7/30	0	0	3	2	10	6	2	1
+	Friday	7/31	1	0	5	0	2	9	2	4
+	Saturday	8/1	0	0	0	0	0	0	0	0
+8/2	-	-	34	1	14	11	43	41	7	15
+8/2	Sunday	8/2	0	0	4	2	3	0	0	0
+	Monday	8/3	-3	1	0	-1	4	7	0	0
+	Tuesday	8/4	6	0	4	4	10	12	1	6
+	Wednesday	8/5	10	0	0	3	10	5	1	9
+	Thursday	8/6	10	0	3	3	10	8	2	0
+	Friday	8/7	11	0	3	0	6	9	3	0
+	Saturday	8/8	0	0	0	0	0	0	0	0</textarea>
     <button class="load-btn" onclick="loadPastedData()">Load pasted data</button>
     <p class="hint">Paste rows with header: DOW, Date, then one column per FC. Negative values = over capacity (too many POs vs. available appointments). Group/subtotal rows (where Date is blank or "-") are skipped automatically.</p>
   </details>
@@ -141,18 +146,58 @@ Saturday	8/8	0	0	0	0	0	0	0	0</textarea>
 
   let parsedData = null; // { fcs: [...], rows: [{week, day, date, vals: {fc: val}}] }
 
+  function countNonEmpty(arr) {
+    return arr.filter(c => c && c.trim() !== '').length;
+  }
+
+  function buildSections(sectionRow, dateIdx) {
+    const sections = [];
+    for (let j = dateIdx + 1; j < sectionRow.length; j++) {
+      if (sectionRow[j] && sectionRow[j].trim() !== '') {
+        sections.push({ label: sectionRow[j], start: j });
+      }
+    }
+    for (let i = 0; i < sections.length; i++) {
+      sections[i].end = (i + 1 < sections.length) ? sections[i + 1].start - 1 : sectionRow.length - 1;
+    }
+    return sections;
+  }
+
   function loadFromRows(rows) {
     let headerIdx = rows.findIndex(r => r.some(c => c.toLowerCase() === 'date'));
     if (headerIdx === -1) { headerIdx = 0; }
-    const header = rows[headerIdx];
-    const dayIdx = header.findIndex(c => c.toLowerCase() === 'dow' || c.toLowerCase() === 'day');
-    const dateIdx = header.findIndex(c => c.toLowerCase() === 'date');
-    const fcCols = header
-      .map((h, i) => (i !== dayIdx && i !== dateIdx && h) ? { name: h, idx: i } : null)
-      .filter(Boolean);
+    const sectionRow = rows[headerIdx];
+    const dayIdx = sectionRow.findIndex(c => c.toLowerCase() === 'dow' || c.toLowerCase() === 'day');
+    const dateIdx = sectionRow.findIndex(c => c.toLowerCase() === 'date');
+    const nextRow = rows[headerIdx + 1] || [];
+
+    const sectionNonEmpty = countNonEmpty(sectionRow.slice(dateIdx + 1));
+    const nextNonEmpty = countNonEmpty(nextRow.slice(dateIdx + 1));
+
+    let nameRow, dataStartIdx, sections;
+    if (nextNonEmpty > sectionNonEmpty) {
+      // two-tier header: sectionRow has merged section labels (e.g. "Available Appointments"),
+      // nextRow has the actual per-FC column names
+      nameRow = nextRow;
+      dataStartIdx = headerIdx + 2;
+      sections = buildSections(sectionRow, dateIdx);
+    } else {
+      // single header row: sectionRow itself has the FC names
+      nameRow = sectionRow;
+      dataStartIdx = headerIdx + 1;
+      sections = [{ label: null, start: dateIdx + 1, end: nameRow.length - 1 }];
+    }
+
+    const section = sections.find(s => s.label && s.label.toLowerCase().includes('appoint')) || sections[0];
+
+    const fcCols = [];
+    for (let j = section.start; j <= section.end; j++) {
+      const name = nameRow[j];
+      if (name && name.trim() !== '') fcCols.push({ name: name.trim(), idx: j });
+    }
 
     const dataRows = [];
-    rows.slice(headerIdx + 1).forEach(r => {
+    rows.slice(dataStartIdx).forEach(r => {
       const dateStr = r[dateIdx];
       if (!dateStr || dateStr === '-') return; // skip group/subtotal rows
       const dayStr = dayIdx > -1 ? r[dayIdx] : '';
