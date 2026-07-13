@@ -140,7 +140,15 @@ function utilColor(pct) {
 function buildChartSVG(months, series) {
   const width = 1400, height = 380, padL = 46, padR = 16, padT = 10, padB = 26;
   const plotW = width - padL - padR, plotH = height - padT - padB;
-  const maxY = 200;
+
+  // Scale the y-axis to the actual data instead of a fixed 0-200%, so values
+  // clustered in a narrow band (e.g. 20-105%) aren't squeezed into a sliver.
+  let rawMax = 0;
+  series.forEach(s => s.values.forEach(v => { if (v !== null && v > rawMax) rawMax = v; }));
+  let maxY = Math.ceil(rawMax / 20) * 20;
+  if (maxY - rawMax < 10) maxY += 20; // keep top gridline from crowding the highest point
+  maxY = Math.max(maxY, 100); // always show at least up to the 100% reference line
+  const gridStep = maxY <= 120 ? 10 : 20;
 
   function xPos(i) { return padL + (months.length <= 1 ? 0 : (i / (months.length - 1)) * plotW); }
   function yPos(v) {
@@ -149,7 +157,7 @@ function buildChartSVG(months, series) {
   }
 
   let grid = '';
-  for (let g = 0; g <= maxY; g += 20) {
+  for (let g = 0; g <= maxY; g += gridStep) {
     const y = yPos(g);
     grid += '<line x1="' + padL + '" y1="' + y + '" x2="' + (width - padR) + '" y2="' + y + '" stroke="#eee" stroke-width="1"/>' +
       '<text x="' + (padL - 8) + '" y="' + (y + 4) + '" font-size="10" fill="#999" text-anchor="end">' + g + '%</text>';
@@ -209,25 +217,10 @@ fetch(fetchUrl)
     const util = byType['util'] || {};
     const remaining = byType['remaining'] || {};
 
-    // For EWR specifically, the source sheet has one "combined total" row
-    // (identifiable because its raw name has two nested parenthetical groups,
-    // e.g. "EWR (ELZ + LYN) (ELZ + LYN + NEW)") plus several individual
-    // sub-location breakdown rows (LYN, NEW, ELZ) that just append a single
-    // qualifier onto plain "EWR". We only want the combined total surfaced
-    // here — the breakdowns are still in the source sheet if ever needed.
-    function isEwrCombinedTotal(fc) {
-      const parenCount = (fc.match(/\(/g) || []).length;
-      return parenCount >= 2;
-    }
-    function isEwrIndividualBreakdown(fc) {
-      return displayLabel(fc) === 'EWR' && !isEwrCombinedTotal(fc);
-    }
-
-    // Skip any series with no real data at all (e.g. a variant that's fully phased out),
-    // and skip individual EWR sub-location breakdowns in favor of the combined total.
-    const activeUtilFCs = utilOrder
-      .filter(fc => (util[fc] || []).some(v => v !== null))
-      .filter(fc => !isEwrIndividualBreakdown(fc));
+    // Skip any series with no real data at all (e.g. a variant that's fully phased out).
+    // No special-case EWR filtering needed anymore — the export script itself now
+    // collapses duplicate FC rows down to one clean combined row per FC.
+    const activeUtilFCs = utilOrder.filter(fc => (util[fc] || []).some(v => v !== null));
 
     const colorFor = {};
     activeUtilFCs.forEach((fc, i) => { colorFor[fc] = PALETTE[i % PALETTE.length]; });
@@ -263,10 +256,14 @@ fetch(fetchUrl)
     const remainingBody = document.getElementById('remainingBody');
     remainingBody.innerHTML = Object.keys(remaining).map(fc => {
       const vals = remaining[fc];
-      const cells = vals.map(v => {
+      const utilVals = util[fc] || [];
+      const cells = vals.map((v, i) => {
         if (v === null) return '<td>\u2014</td>';
-        const cls = v < 0 ? 'neg' : 'pos';
-        return '<td class="' + cls + '">' + Math.round(v).toLocaleString() + '</td>';
+        // Color by this FC's utilization % for the same month, so the remaining-
+        // slots number reflects how tight capacity actually is, not just its sign.
+        const utilPct = utilVals[i];
+        const color = (utilPct !== null && utilPct !== undefined) ? utilColor(utilPct) : (v < 0 ? '#c0392b' : '#1e8e5a');
+        return '<td style="color:' + color + '">' + Math.round(v).toLocaleString() + '</td>';
       }).join('');
       return '<tr><td class="fc-cell">' + fc + '</td>' + cells + '</tr>';
     }).join('');
@@ -274,7 +271,6 @@ fetch(fetchUrl)
   .catch(err => {
     document.getElementById('kpiRow').innerHTML = '<div class="error">Could not load data: ' + err.message + '</div>';
   });
- 
 </script>
 
 </body>
