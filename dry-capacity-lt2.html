@@ -169,6 +169,15 @@ function buildChartSVG(months, series) {
     xlabels += '<text x="' + x + '" y="' + (height - 8) + '" font-size="10" fill="#999" text-anchor="middle">' + m + '</text>';
   });
 
+  // 100% capacity reference line — drawn distinctly from the FC series so it's
+  // immediately clear which lines are crossing into over-capacity territory.
+  let capacityLine = '';
+  if (maxY >= 100) {
+    const y100 = yPos(100);
+    capacityLine = '<line x1="' + padL + '" y1="' + y100 + '" x2="' + (width - padR) + '" y2="' + y100 + '" stroke="#c0392b" stroke-width="1.5" stroke-dasharray="6,4" opacity="0.55"/>' +
+      '<text x="' + (width - padR) + '" y="' + (y100 - 6) + '" font-size="11" fill="#c0392b" text-anchor="end" font-weight="600">100% capacity</text>';
+  }
+
   let lines = '';
   series.forEach((s, idx) => {
     let d = '';
@@ -183,7 +192,7 @@ function buildChartSVG(months, series) {
     lines += '<path d="' + d + '" fill="none" stroke="' + s.color + '" stroke-width="2"' + dash + '/>' + dots;
   });
 
-  return '<svg viewBox="0 0 ' + width + ' ' + height + '" style="width:100%;height:auto;display:block;">' + grid + xlabels + lines + '</svg>';
+  return '<svg viewBox="0 0 ' + width + ' ' + height + '" style="width:100%;height:auto;display:block;">' + grid + capacityLine + xlabels + lines + '</svg>';
 }
 
 function buildColgroup(count) {
