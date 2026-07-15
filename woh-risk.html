@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -207,7 +208,7 @@
         let html = '<div><div class="summary-section-title">' + label + '</div><div class="chart-card">';
 
         allWeeks[ds].forEach(week => {
-          const rows = allData[ds][week] || [];
+          const rows = (allData[ds][week] || []).filter(r => r.startWOH !== 0);
           if (!rows.length) return;
 
           // Sort: OOS first, then Critical, then At risk, then by WOH asc within each
@@ -244,7 +245,7 @@
         const el = document.getElementById(ds+'-'+tab);
         let html = '';
         allWeeks[ds].forEach(week => {
-          let rows = (allData[ds][week]||[]).filter(r => !selectedFC[ds] || r.fc===selectedFC[ds]);
+          let rows = (allData[ds][week]||[]).filter(r => r.startWOH !== 0 && (!selectedFC[ds] || r.fc===selectedFC[ds]));
           if(riskFilter) rows = rows.filter(r => r.risk===riskFilter);
           html += buildWeekSection(ds, week, rows);
         });
